@@ -53,8 +53,8 @@ try:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### ✍️ Créditos")
-    st.sidebar.write(f"**Desenvolvido por:** Paulo")
-    st.sidebar.write("**Setor:** Fiscal")
+    st.sidebar.write(f"**Desenvolvido por:** Paulo Henrique")
+    st.sidebar.write("Setor Fiscal")
 
     # --- KPIs (Indicadores principais) ---
     c1, c2, c3, c4 = st.columns(4)
@@ -129,3 +129,4 @@ else:
     # Mensagem que aparece enquanto o arquivo não é carregado
 
     st.info("👋 Bem-vindo! Por favor, utilize a barra lateral à esquerda para carregar o seu arquivo 'BASE_PILOTO.xlsx'.")
+
