@@ -2,21 +2,31 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Configuração da página para ocupar a tela toda
 st.set_page_config(page_title="Controle de Estoque - Frigorífico", layout="wide")
 
-st.title("🥩 Dashboard de Estoque Seridoense - Setor Fiscal")
+st.title("🥩 Dashboard de Estoque - Setor Fiscal")
 st.markdown("---")
 
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-@st.cache_data(show_spinner="Carregando base de dados...")
+@st.cache_data(show_spinner="Sincronizando bases de dados...")
 def carregar_dados():
+    # 1. Lê a base de estoque
     df = pd.read_excel("BASE_PILOTO.xlsx")
     df.columns = df.columns.str.strip()
-    df = df[pd.to_numeric(df['Código'], errors='coerce').notnull()]
     
+    # 2. Lê a nova planilha de classificação (Traseiro/Dianteiro)
+    df_class = pd.read_excel("CLASS_D_OU_T.xlsx")
+    df_class.columns = df_class.columns.str.strip()
+    
+    # 3. Faz o cruzamento (Merge) dos dados pelo Código
+    df = pd.merge(df, df_class[['Código', 'Classificação']], on='Código', how='left')
+    
+    # Preenche o que não encontrar como 'Não Classificado'
+    df['Classificação'] = df['Classificação'].fillna('Não Classificado')
+    
+    df = df[pd.to_numeric(df['Código'], errors='coerce').notnull()]
     df['Filial'] = df['Filial'].astype(int)
     df['Código'] = df['Código'].astype(int)
     
@@ -30,75 +40,75 @@ st.sidebar.header("⚙️ Painel de Controle")
 if st.sidebar.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
-# --- COLOQUE SUA ASSINATURA AQUI ---
-st.sidebar.markdown("---") 
-st.sidebar.markdown("### ✍️ Elaborado por: Paulo Henrique")
-st.sidebar.write("*Setor Fiscal*")
-st.sidebar.caption("Versão 1.0 | 2026")    
 
 st.sidebar.markdown("---")
 
 try:
     df_completo = carregar_dados()
 
+    # NOVO FILTRO: Classificação de Peça
+    peca_selecionada = st.sidebar.multiselect(
+        "Selecione a Peça (Traseiro/Dianteiro):",
+        options=df_completo['Classificação'].unique(),
+        default=df_completo['Classificação'].unique()
+    )
+
     categoria_selecionada = st.sidebar.multiselect(
         "Filtrar Categorias:",
         options=df_completo['Categoria'].unique(),
         default=df_completo['Categoria'].unique()
     )
-    df = df_completo[df_completo['Categoria'].isin(categoria_selecionada)]
+    
+    # Aplicando os filtros
+    df = df_completo[
+        (df_completo['Classificação'].isin(peca_selecionada)) & 
+        (df_completo['Categoria'].isin(categoria_selecionada))
+    ]
+
+    # ASSINATURA
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ✍️ Créditos")
+    st.sidebar.write("**Desenvolvido por:** Paulo")
+    st.sidebar.write("**Setor:** Fiscal")
+    st.sidebar.caption("Versão 1.1 | Classificação Traseiro/Dianteiro")
 
     # --- KPIs ---
     col1, col2, col3, col4 = st.columns(4)
     total_kg = df['Estoque'].sum()
     total_fin = df['Valor Total (R$)'].sum()
-    estoque_mp = df_completo[df_completo['Categoria'] == 'Matéria-Prima']['Estoque'].sum()
-
-    col1.metric("Estoque Selecionado (kg)", f"{total_kg:,.2f} kg".replace(",", "X").replace(".", ",").replace("X", "."))
+    
+    col1.metric("Estoque Filtro (kg)", f"{total_kg:,.2f} kg".replace(",", "X").replace(".", ",").replace("X", "."))
     col2.metric("Valor em estoque", formatar_moeda(total_fin))
-    col3.metric("Estoque MATÉRIA-PRIMA", f"{estoque_mp:,.2f} kg".replace(",", "X").replace(".", ",").replace("X", "."))
-    col4.metric("Qtd Itens", len(df))
+    col3.metric("Itens no Filtro", len(df))
+    col4.metric("Total Matéria-Prima", f"{df_completo[df_completo['Categoria'] == 'Matéria-Prima']['Estoque'].sum():,.2f} kg".replace(",", "X").replace(".", ",").replace("X", "."))
 
     st.markdown("---")
 
-    # --- 1. GRÁFICO DE BARRAS (LARGURA TOTAL) ---
-    st.subheader("📊 Volume Total por Item (Top 20)")
+    # --- GRÁFICO DE BARRAS (Volume por Peça) ---
+    st.subheader("📊 Volume por Item e Classificação")
     top_n = df.nlargest(20, 'Estoque').sort_values('Estoque', ascending=True)
-    top_n['Rótulo_Qtd'] = top_n['Estoque'].apply(lambda x: f"{x:,.2f} kg".replace(",", "X").replace(".", ",").replace("X", "."))
     
     fig_vol = px.bar(
-        top_n, x='Estoque', y='Descrição', orientation='h', text='Rótulo_Qtd',
-        color='Categoria', color_discrete_map={'Matéria-Prima': '#960018', 'Cortes/Outros': '#3274ad'},
+        top_n, x='Estoque', y='Descrição', orientation='h', 
+        color='Classificação', # Agora as cores mostram se é Traseiro ou Dianteiro
+        color_discrete_map={'TRASEIRO': '#960018', 'DIANTEIRO': '#3274ad', 'EXTRA': '#2ecc71'},
         height=600 
     )
     st.plotly_chart(fig_vol, use_container_width=True)
 
     st.markdown("---")
 
-    # --- 2. GRÁFICO DE PIZZA (CENTRALIZADO) ---
-    # Criamos 3 colunas apenas para deixar o gráfico de pizza no meio, sem ocupar a tela toda lateralmente
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        st.subheader("💰 Divisão Financeira por Categoria")
-        fig_pie = px.pie(df, values='Valor Total (R$)', names='Categoria', hole=0.4,
-                         color='Categoria', color_discrete_map={'Matéria-Prima': '#960018', 'Cortes/Outros': '#3274ad'})
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    st.markdown("---")
-
-    # --- 3. TABELA DE DETALHES (LARGURA TOTAL) ---
-    st.subheader("📋 Detalhes do Estoque (Visão Completa)")
+    # --- TABELA DETALHADA ---
+    st.subheader("📋 Detalhes do Estoque com Classificação")
     st.dataframe(
-        df.style.format({
-            'Filial': '{}', 'Código': '{}', 'Estoque': '{:.2f} kg', 
-            'Custo contábil': 'R$ {:.2f}', 'Valor Total (R$)': 'R$ {:.2f}'
+        df[['Filial', 'Código', 'Descrição', 'Classificação', 'Categoria', 'Estoque', 'Valor Total (R$)']].style.format({
+            'Filial': '{}', 'Código': '{}', 'Estoque': '{:.2f} kg', 'Valor Total (R$)': 'R$ {:.2f}'
         }), 
-        use_container_width=True, 
-        hide_index=True
+        use_container_width=True, hide_index=True
     )
 
 except Exception as e:
-    st.error(f"Erro ao carregar os dados: {e}")
+    st.error(f"Erro ao processar as planilhas: {e}")
 else:
     # Mensagem que aparece enquanto o arquivo não é carregado
     st.info("👋 Bem-vindo! Por favor, utilize a barra lateral à esquerda para carregar o seu arquivo 'BASE_PILOTO.xlsx'.")
