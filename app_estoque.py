@@ -30,6 +30,12 @@ st.sidebar.header("⚙️ Painel de Controle")
 if st.sidebar.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
+# --- COLOQUE SUA ASSINATURA AQUI ---
+st.sidebar.markdown("---") 
+st.sidebar.markdown("### ✍️ Elaborado por: Paulo Henrique")
+st.sidebar.write("**Paulo**")
+st.sidebar.write("*Setor Fiscal*")
+st.sidebar.caption("Versão 1.0 | 2026")    
 
 st.sidebar.markdown("---")
 
