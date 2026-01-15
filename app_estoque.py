@@ -45,7 +45,7 @@ try:
 
     # Filtros
     peca_selecionada = st.sidebar.multiselect(
-        "Selecione a Peça (Traseiro/Dianteiro):",
+        "Selecione a classificação do Corte/Peça:",
         options=sorted(df_completo['Classificação'].unique()),
         default=df_completo['Classificação'].unique()
     )
