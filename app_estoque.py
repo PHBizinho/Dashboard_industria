@@ -5,7 +5,7 @@ import plotly.express as px
 # Configuração da página para ocupar a tela toda
 st.set_page_config(page_title="Controle de Estoque - Frigorífico", layout="wide")
 
-st.title("🥩 Dashboard de Estoque - Setor Fiscal")
+st.title("🥩 Dashboard de Estoque Seridoense - Setor Fiscal")
 st.markdown("---")
 
 def formatar_moeda(valor):
@@ -33,7 +33,6 @@ if st.sidebar.button("🔄 Atualizar Dados"):
 # --- COLOQUE SUA ASSINATURA AQUI ---
 st.sidebar.markdown("---") 
 st.sidebar.markdown("### ✍️ Elaborado por: Paulo Henrique")
-st.sidebar.write("**Paulo**")
 st.sidebar.write("*Setor Fiscal*")
 st.sidebar.caption("Versão 1.0 | 2026")    
 
