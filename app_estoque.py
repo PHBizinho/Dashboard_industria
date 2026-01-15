@@ -5,7 +5,7 @@ import plotly.express as px
 # Configuração da página para ocupar a tela toda
 st.set_page_config(page_title="Controle de Estoque - Frigorífico", layout="wide")
 
-st.title("🥩 Dashboard de Estoque - Setor Fiscal")
+st.title("🥩 Dashboard de Estoque Seridoense - Setor Fiscal")
 st.markdown("---")
 
 def formatar_moeda(valor):
@@ -127,4 +127,5 @@ except Exception as e:
     st.error(f"Erro ao processar dados: {e}")
 else:
     # Mensagem que aparece enquanto o arquivo não é carregado
+
     st.info("👋 Bem-vindo! Por favor, utilize a barra lateral à esquerda para carregar o seu arquivo 'BASE_PILOTO.xlsx'.")
