@@ -29,10 +29,9 @@ def carregar_dados():
     df['Categoria'] = df['Código'].apply(lambda x: 'Matéria-Prima' if x in codigos_mp else 'Cortes/Outros')
     df['Valor Total (R$)'] = df['Estoque'] * df['Custo contábil']
     
-    # --- CÁLCULO DE REPRESENTATIVIDADE (PARETO) ---
+    # Cálculo de Representatividade
     total_kg_geral = df['Estoque'].sum()
     total_val_geral = df['Valor Total (R$)'].sum()
-    
     df['% Peso'] = (df['Estoque'] / total_kg_geral) * 100
     df['% Valor'] = (df['Valor Total (R$)'] / total_val_geral) * 100
     
@@ -46,7 +45,6 @@ if st.sidebar.button("🔄 Atualizar Dados"):
 
 try:
     df_completo = carregar_dados()
-    
     peca_selecionada = st.sidebar.multiselect(
         "**Selecione a(as) classificação(ões):**",
         options=sorted(df_completo['Classificação'].unique()),
@@ -69,22 +67,7 @@ try:
 
     st.markdown("---")
 
-    # --- NOVO: GRÁFICO DE PARETO (REPRESENTATIVIDADE FINANCEIRA) ---
-    st.subheader("🎯 Análise de Pareto: Impacto Financeiro por Corte")
-    df_pareto = df.nlargest(15, 'Valor Total (R$)')
-    
-    fig_pareto = px.bar(
-        df_pareto, x='Descrição', y='% Valor',
-        text=df_pareto['% Valor'].apply(lambda x: f"{x:.1f}%"),
-        color='% Valor', color_continuous_scale='Reds',
-        title="Top 15 Itens que mais pesam no Bolso (R$)"
-    )
-    fig_pareto.update_traces(textposition='outside', textfont=dict(color='black', size=12))
-    st.plotly_chart(fig_pareto, use_container_width=True)
-
-    st.markdown("---")
-
-    # --- GRÁFICO DE VOLUME (BARRAS HORIZONTAIS) ---
+    # --- 1. VOLUME DETALHADO (TOP 20) ---
     st.subheader("📊 Volume Detalhado por Corte (Top 20)")
     top_n = df.nlargest(20, 'Estoque').sort_values('Estoque', ascending=True)
     top_n['Rótulo'] = top_n['Estoque'].apply(lambda x: f"<b>{x:,.2f} kg</b>".replace(",", "X").replace(".", ",").replace("X", "."))
@@ -100,17 +83,41 @@ try:
 
     st.markdown("---")
 
-    # --- TABELA COM PORCENTAGENS ---
+    # --- 2. ANÁLISE DE PARETO FINANCEIRO ---
+    st.subheader("🎯 Análise de Pareto: Impacto Financeiro por Corte")
+    df_pareto = df.nlargest(15, 'Valor Total (R$)')
+    fig_pareto = px.bar(
+        df_pareto, x='Descrição', y='% Valor',
+        text=df_pareto['% Valor'].apply(lambda x: f"<b>{x:.1f}%</b>"),
+        color='% Valor', color_continuous_scale='Reds'
+    )
+    fig_pareto.update_traces(textposition='outside', textfont=dict(color='black', size=12))
+    st.plotly_chart(fig_pareto, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- 3. GRÁFICOS DE PIZZA (RECUPERADOS) ---
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        st.subheader("⚖️ Distribuição de Peso")
+        fig1 = px.pie(df, values='Estoque', names='Classificação', hole=0.4, 
+                      color='Classificação', color_discrete_map={'TRASEIRO': '#960018', 'DIANTEIRO': '#3274ad', 'EXTRA': '#2ecc71', 'MATERIA PRIMA': '#f39c12', 'SOL': '#9b59b6'})
+        st.plotly_chart(fig1, use_container_width=True)
+    with col_p2:
+        st.subheader("💰 Distribuição Financeira")
+        fig2 = px.pie(df, values='Valor Total (R$)', names='Classificação', hole=0.4, 
+                      color='Classificação', color_discrete_map={'TRASEIRO': '#960018', 'DIANTEIRO': '#3274ad', 'EXTRA': '#2ecc71', 'MATERIA PRIMA': '#f39c12', 'SOL': '#9b59b6'})
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- 4. TABELA DETALHADA ---
     st.subheader("📋 Detalhes com Representatividade (% Pareto)")
     colunas_exibir = ['Código', 'Descrição', 'Classificação', 'Estoque', '% Peso', 'Valor Total (R$)', '% Valor']
-    
     st.dataframe(
         df[colunas_exibir].sort_values('% Valor', ascending=False).style.format({
-            'Código': '{}', 
-            'Estoque': '{:.2f} kg', 
-            '% Peso': '{:.2f}%',
-            'Valor Total (R$)': 'R$ {:.2f}', 
-            '% Valor': '{:.2f}%'
+            'Código': '{}', 'Estoque': '{:.2f} kg', '% Peso': '{:.2f}%',
+            'Valor Total (R$)': 'R$ {:.2f}', '% Valor': '{:.2f}%'
         }), 
         use_container_width=True, hide_index=True
     )
