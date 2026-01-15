@@ -45,7 +45,7 @@ try:
     
     # Filtros baseados na sua planilha de classificação
     peca_selecionada = st.sidebar.multiselect(
-        "Selecione a(as) classificação(ões):",
+        "**Selecione a(as) classificação(ões):**",
         options=sorted(df_completo['Classificação'].unique()),
         default=df_completo['Classificação'].unique()
     )
@@ -129,5 +129,6 @@ else:
     # Mensagem que aparece enquanto o arquivo não é carregado
 
     st.info("👋 Bem-vindo! Por favor, utilize a barra lateral à esquerda para carregar o seu arquivo 'BASE_PILOTO.xlsx'.")
+
 
 
