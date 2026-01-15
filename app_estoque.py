@@ -112,7 +112,7 @@ try:
     st.markdown("---")
 
     # --- 4. TABELA DETALHADA ---
-    st.subheader("📋 Detalhes com Representatividade (% Pareto)")
+    st.subheader("📋 Ver base de dados completa")
     colunas_exibir = ['Código', 'Descrição', 'Classificação', 'Estoque', '% Peso', 'Valor Total (R$)', '% Valor']
     st.dataframe(
         df[colunas_exibir].sort_values('% Valor', ascending=False).style.format({
@@ -126,4 +126,5 @@ except Exception as e:
     st.error(f"Erro ao processar dados: {e}")
 else:
     # Mensagem que aparece enquanto o arquivo não é carregado
+
     st.info("👋 Bem-vindo! Por favor, utilize a barra lateral à esquerda para carregar o seu arquivo 'BASE_PILOTO.xlsx'.")
