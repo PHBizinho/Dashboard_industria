@@ -1,3 +1,13 @@
+import oracledb
+import os
+
+# ATENÇÃO: Esta linha é obrigatória para conectar no banco do WinThor
+try:
+    # O 'r' antes das aspas é importante para o Windows ler as barras corretamente
+    oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_25")
+    print("Cliente Oracle inicializado com sucesso!")
+except Exception as e:
+    print(f"Erro ao inicializar cliente Oracle: {e}")
 import pandas as pd
 import oracledb
 import streamlit as st
