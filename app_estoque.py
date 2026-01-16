@@ -32,6 +32,11 @@ def carregar_dados():
     df['Classificação'] = df['Classificação'].fillna('Não Classificado')
     df = df[pd.to_numeric(df['Código'], errors='coerce').notnull()]
     df['Código'] = df['Código'].astype(int)
+    
+    # Preencher valores vazios de vendas com 0 para evitar erros no gráfico
+    colunas_vendas = ['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']
+    df[colunas_vendas] = df[colunas_vendas].fillna(0)
+    
     df['Estoque Disponível'] = df['Estoque'] - df['Reservado'] - df['Qt.Avaria']
     df['Valor Total (R$)'] = df['Estoque'] * df['Custo contábil']
     df['Média Vendas (3m)'] = df[['Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].mean(axis=1)
@@ -47,7 +52,6 @@ try:
     df_completo = carregar_dados()
     nomes_meses = obter_nomes_meses()
     
-    # 1. FILTRO GLOBAL (Classificação)
     peca_selecionada = st.sidebar.multiselect(
         "**Selecione a(as) classificação(ões):**",
         options=sorted(df_completo['Classificação'].unique()),
@@ -55,39 +59,31 @@ try:
     )
     df_global = df_completo[df_completo['Classificação'].isin(peca_selecionada)]
     
-    # 2. FILTRO ISOLADO (Corte) COM BOTÃO DE RESET
     cortes_disponiveis = sorted(df_global['Descrição'].unique())
     
-    # Lógica do Botão de Limpar
-    if 'corte_reset' not in st.session_state:
-        st.session_state.corte_reset = []
-
+    # Lógica do filtro isolado com botão
     corte_selecionado = st.sidebar.multiselect(
         "**Filtrar por Corte (Vendas e Tabela):**",
         options=cortes_disponiveis,
-        key='corte_filter',
-        default=st.session_state.corte_reset if all(c in cortes_disponiveis for c in st.session_state.corte_reset) else []
+        key='corte_filter'
     )
 
     if st.sidebar.button("🗑️ Limpar Filtro de Corte"):
-        st.session_state.corte_reset = []
-        # Força a limpeza limpando o widget
-        st.cache_data.clear()
         st.rerun()
 
     st.sidebar.markdown("---")
-    st.sidebar.write(f"**Desenvolvedido por:** Paulo Henrique")
+    st.sidebar.write(f"**Desenvolvido por:** Paulo Henrique")
 
-    # --- KPIs (Globais) ---
+    # --- KPIs ---
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Estoque Total (kg)", f"{df_global['Estoque'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    c1.metric("Estoque Selecionado (kg)", f"{df_global['Estoque'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
     c2.metric("Total Reservado (kg)", f"{df_global['Reservado'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c3.metric("Giro Médio (3m)", f"{df_global['Média Vendas (3m)'].sum():,.2f} kg")
+    c3.metric("Média Vendas (3m)", f"{df_global['Média Vendas (3m)'].sum():,.2f} kg")
     c4.metric("Valor Total", formatar_moeda(df_global['Valor Total (R$)'].sum()))
 
     st.markdown("---")
 
-    # --- RANKING TOP 20 (Global) ---
+    # --- RANKING TOP 20 ---
     st.subheader("📊 Ranking de Volume em Estoque (Top 20)")
     top_n = df_global.nlargest(20, 'Estoque').sort_values('Estoque', ascending=True)
     top_n['Rótulo'] = top_n['Estoque'].apply(lambda x: f"<b>{x:,.2f} kg</b>".replace(",", "X").replace(".", ",").replace("X", "."))
@@ -98,20 +94,31 @@ try:
 
     st.markdown("---")
 
-    # --- SEÇÃO DE VENDAS E TABELA (Filtrada) ---
+    # --- 3. GRÁFICO DE VENDAS (AQUI ENTRA O NOVO TRECHO) ---
     df_vendas = df_global.copy()
     if corte_selecionado:
         df_vendas = df_vendas[df_vendas['Descrição'].isin(corte_selecionado)]
 
     st.subheader(f"📈 Histórico de Vendas: {', '.join(corte_selecionado) if corte_selecionado else 'Geral'}")
+    
     df_hist = df_vendas[['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].sum().reset_index()
     df_hist.columns = ['Mês_Ref', 'Volume']
     df_hist['Mês_Nome'] = df_hist['Mês_Ref'].map(nomes_meses)
     df_hist = df_hist.iloc[::-1]
 
-    fig_hist = px.bar(df_hist, x='Mês_Nome', y='Volume', text=df_hist['Volume'].apply(lambda x: f"<b>{x:,.0f} kg</b>"),
-                     color_discrete_sequence=['#2ecc71'])
-    fig_hist.update_traces(textposition='outside', textfont=dict(color='black', size=14))
+    # --- NOVO TRECHO INSERIDO AQUI ---
+    fig_hist = px.bar(
+        df_hist, x='Mês_Nome', y='Volume', 
+        text=df_hist['Volume'].apply(lambda x: f"<b>{x:,.0f} kg</b>".replace(",", ".")),
+        color_discrete_sequence=['#2ecc71'],
+        range_y=[0, df_hist['Volume'].max() * 1.3] # Aumentado para 1.3 para dar mais espaço
+    )
+    fig_hist.update_traces(
+        textposition='outside', 
+        textfont=dict(color='black', size=14),
+        cliponaxis=False 
+    )
+    # --------------------------------
     st.plotly_chart(fig_hist, use_container_width=True)
 
     st.markdown("---")
