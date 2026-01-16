@@ -111,7 +111,7 @@ try:
     if corte_selecionado:
         df_vendas = df_vendas[df_vendas['Descrição'].isin(corte_selecionado)]
 
-    st.subheader(f"📈 Histórico: {nomes_meses['Venda Mês 3']} até {nomes_meses['Mês']}")
+    st.subheader(f"📈 Histórico: {nomes_meses['Venda Mês 3']} até {nomes_meses['Venda Mês']}")
     df_hist = df_vendas[['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].sum().reset_index()
     df_hist.columns = ['ID', 'Volume']
     df_hist['Mês'] = df_hist['ID'].map(nomes_meses)
@@ -144,5 +144,4 @@ except Exception as e:
     st.error(f"Erro ao processar: {e}")
 else:
     # Mensagem que aparece enquanto o arquivo não é carregado
-
     st.info("👋 Bem-vindo! Por favor, utilize a barra lateral à esquerda para carregar o seu arquivo 'BASE_PILOTO.xlsx'.")
