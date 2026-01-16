@@ -17,9 +17,18 @@ def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
     try:
         conn = oracledb.connect(**conn_params)
-        query = """SELECT CODPROD AS "Código", QTESTGER AS "Estoque", 
-                   (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Estoque Disponível",
-                   QTVENDMES AS "Venda Mês" FROM MMFRIOS.PCEST 
+        # Query atualizada para trazer Bloqueado, Avaria e todos os meses de venda
+        query = """SELECT 
+                    CODPROD AS "Código", 
+                    QTESTGER AS "Estoque", 
+                    QTBLOQUEADA AS "Bloqueado",
+                    QTAVARIA AS "Avaria",
+                    (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Estoque Disponível",
+                    QTVENDMES AS "Venda Mês",
+                    QTVENDMES1 AS "Venda Mês 1",
+                    QTVENDMES2 AS "Venda Mês 2",
+                    QTVENDMES3 AS "Venda Mês 3"
+                   FROM MMFRIOS.PCEST 
                    WHERE CODFILIAL = 3 AND QTESTGER > 0"""
         df_estoque = pd.read_sql(query, conn)
         conn.close()
@@ -28,14 +37,15 @@ def carregar_dados():
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         
-        # Cruzamento de dados (JOIN)
+        # Cruzamento de dados e filtros solicitados
         df_final = pd.merge(df_estoque, df_nomes, on="Código", how="left")
-        
-        # AJUSTE 1: Remover quem não está no Excel
         df_final = df_final.dropna(subset=['Descrição'])
         
-        # AJUSTE 2: Reordenar colunas (Descrição ao lado de Código)
-        colunas = ['Código', 'Descrição', 'Estoque', 'Estoque Disponível', 'Venda Mês']
+        # Organização das colunas conforme solicitado
+        colunas = [
+            'Código', 'Descrição', 'Estoque', 'Bloqueado', 'Avaria', 
+            'Estoque Disponível', 'Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3'
+        ]
         return df_final[colunas]
     except Exception as e:
         st.error(f"Erro na integração: {e}")
@@ -51,27 +61,37 @@ df = carregar_dados()
 if df is not None:
     # KPIs principais
     c1, c2, c3 = st.columns(3)
-    c1.metric("Produtos Cadastrados", len(df))
+    c1.metric("Produtos no Excel", len(df))
     c2.metric("Estoque Disponível", f"{df['Estoque Disponível'].sum():,.0f} kg")
-    c3.metric("Volume de Venda", f"{df['Venda Mês'].sum():,.0f} kg")
+    c3.metric("Venda Total (Mês)", f"{df['Venda Mês'].sum():,.0f} kg")
 
-    # Gráficos
-    col_graf, col_tab = st.columns([1.2, 1])
+    # --- GRÁFICO TOP 20 ESTOQUE (GRANDE) ---
+    st.subheader("🥩 Top 20 - Maior Volume em Estoque")
+    df_top_est = df.nlargest(20, 'Estoque')
+    fig_est = px.bar(df_top_est, x='Descrição', y='Estoque', 
+                     color='Estoque', color_continuous_scale='Greens',
+                     text_auto='.2s')
+    st.plotly_chart(fig_est, use_container_width=True)
+
+    st.markdown("---")
+
+    # Gráficos de Venda e Pareto lado a lado
+    col_graf, col_tab = st.columns([1, 1])
 
     with col_graf:
-        st.subheader("Top 15 - Ranking de Vendas")
-        df_top = df.nlargest(15, 'Venda Mês')
-        fig = px.bar(df_top, x='Venda Mês', y='Descrição', orientation='h', 
-                     color='Venda Mês', color_continuous_scale='Blues')
-        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("🏆 Ranking de Vendas (Top 15)")
+        df_top_venda = df.nlargest(15, 'Venda Mês')
+        fig_venda = px.bar(df_top_venda, x='Venda Mês', y='Descrição', orientation='h', 
+                           color='Venda Mês', color_continuous_scale='Blues')
+        st.plotly_chart(fig_venda, use_container_width=True)
 
     with col_tab:
-        st.subheader("Análise de Pareto (Curva de Venda)")
+        st.subheader("📈 Curva Pareto de Vendas")
         df_p = df.sort_values("Venda Mês", ascending=False).copy()
         df_p['% Acumulado'] = (df_p['Venda Mês'] / df_p['Venda Mês'].sum() * 100).cumsum()
         fig_p = px.line(df_p, x='Descrição', y='% Acumulado', markers=True)
         st.plotly_chart(fig_p, use_container_width=True)
 
-    # Detalhamento Geral com os ajustes solicitados
-    st.subheader("📋 Detalhamento Geral (Apenas itens do Excel)")
+    # Detalhamento Geral ajustado
+    st.subheader("📋 Detalhamento Geral")
     st.dataframe(df, use_container_width=True, hide_index=True)
