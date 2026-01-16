@@ -13,7 +13,7 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def obter_nomes_meses():
-    # Referência baseada na data atual de uso
+    # Referência baseada na data de hoje: 16/01/2026
     agora = datetime(2026, 1, 16) 
     
     meses = {
@@ -67,7 +67,7 @@ try:
     if st.sidebar.button("🗑️ Limpar Filtro"):
         st.rerun()
 
-    # --- RESTAURAÇÃO DOS CRÉDITOS NA SIDEBAR ---
+    # --- CRÉDITOS FIXOS NA SIDEBAR ---
     st.sidebar.markdown("---")
     st.sidebar.markdown("### ✍️ Créditos")
     st.sidebar.write("**Desenvolvido por:** Paulo Henrique")
@@ -82,18 +82,26 @@ try:
 
     st.markdown("---")
 
-    # --- 1. RANKING VOLUME ---
+    # --- 1. RANKING VOLUME (COM NÚMEROS RESTAURADOS) ---
     st.subheader("📊 Ranking de Volume em Estoque (Top 20)")
     top_n = df_global.nlargest(20, 'Estoque').sort_values('Estoque', ascending=True)
-    fig_vol = px.bar(top_n, x='Estoque', y='Descrição', orientation='h', color='Classificação',
-                     color_discrete_map={'TRASEIRO': '#960018', 'DIANTEIRO': '#3274ad'}, height=500)
+    # Criando o rótulo de texto para os kg
+    top_n['Rótulo'] = top_n['Estoque'].apply(lambda x: f"<b>{x:,.2f} kg</b>".replace(",", "X").replace(".", ",").replace("X", "."))
+    
+    fig_vol = px.bar(top_n, x='Estoque', y='Descrição', orientation='h', text='Rótulo',
+                     color='Classificação', color_discrete_map={'TRASEIRO': '#960018', 'DIANTEIRO': '#3274ad'}, height=600)
+    fig_vol.update_traces(textposition='auto', textfont=dict(color='black', size=12))
     st.plotly_chart(fig_vol, use_container_width=True)
 
-    # --- 2. PARETO ---
+    # --- 2. PARETO (COM PORCENTAGENS RESTAURADAS) ---
     st.subheader("🎯 Impacto Financeiro (%)")
     df_global['% Valor'] = (df_global['Valor Total (R$)'] / df_global['Valor Total (R$)'].sum()) * 100
     df_pareto = df_global.nlargest(15, 'Valor Total (R$)')
-    fig_pareto = px.bar(df_pareto, x='Descrição', y='% Valor', color='% Valor', color_continuous_scale='Reds')
+    
+    fig_pareto = px.bar(df_pareto, x='Descrição', y='% Valor', 
+                        text=df_pareto['% Valor'].apply(lambda x: f"<b>{x:.1f}%</b>"),
+                        color='% Valor', color_continuous_scale='Reds')
+    fig_pareto.update_traces(textposition='outside', textfont=dict(color='black', size=12))
     st.plotly_chart(fig_pareto, use_container_width=True)
 
     st.markdown("---")
@@ -104,7 +112,6 @@ try:
         df_vendas = df_vendas[df_vendas['Descrição'].isin(corte_selecionado)]
 
     st.subheader(f"📈 Histórico: {nomes_meses['Venda Mês 3']} até {nomes_meses['Venda Mês']}")
-    
     df_hist = df_vendas[['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].sum().reset_index()
     df_hist.columns = ['ID', 'Volume']
     df_hist['Mês'] = df_hist['ID'].map(nomes_meses)
@@ -112,7 +119,7 @@ try:
 
     fig_hist = px.bar(df_hist, x='Mês', y='Volume', text=df_hist['Volume'].apply(lambda x: f"<b>{x:,.0f} kg</b>".replace(",", ".")),
                       color_discrete_sequence=['#2ecc71'], range_y=[0, df_hist['Volume'].max() * 1.3])
-    fig_hist.update_traces(textposition='outside', cliponaxis=False)
+    fig_hist.update_traces(textposition='outside', cliponaxis=False, textfont=dict(size=14))
     st.plotly_chart(fig_hist, use_container_width=True)
 
     st.markdown("---")
