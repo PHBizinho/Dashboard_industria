@@ -13,10 +13,9 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def obter_nomes_meses():
-    # Referência baseada na sua data de uso (Janeiro/2026)
+    # Referência baseada na data atual de uso
     agora = datetime(2026, 1, 16) 
     
-    # Criando o mapeamento amigável para as colunas
     meses = {
         'Venda Mês': f"Venda {agora.strftime('%b/%y').upper()}",
         'Venda Mês 1': f"Venda {(agora - relativedelta(months=1)).strftime('%b/%y').upper()}",
@@ -36,7 +35,6 @@ def carregar_dados():
     df = df[pd.to_numeric(df['Código'], errors='coerce').notnull()]
     df['Código'] = df['Código'].astype(int)
     
-    # Tratamento de valores nulos nas vendas
     col_vendas = ['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']
     df[col_vendas] = df[col_vendas].fillna(0)
     
@@ -49,8 +47,13 @@ try:
     df_completo = carregar_dados()
     nomes_meses = obter_nomes_meses()
     
-    # --- BARRA LATERAL ---
+    # --- BARRA LATERAL (PAINEL DE CONTROLE) ---
     st.sidebar.header("⚙️ Painel de Controle")
+    
+    if st.sidebar.button("🔄 Atualizar Dados"):
+        st.cache_data.clear()
+        st.rerun()
+
     peca_selecionada = st.sidebar.multiselect(
         "**Selecione a(as) classificação(ões):**",
         options=sorted(df_completo['Classificação'].unique()),
@@ -63,6 +66,12 @@ try:
 
     if st.sidebar.button("🗑️ Limpar Filtro"):
         st.rerun()
+
+    # --- RESTAURAÇÃO DOS CRÉDITOS NA SIDEBAR ---
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ✍️ Créditos")
+    st.sidebar.write("**Desenvolvido por:** Paulo Henrique")
+    st.sidebar.write("**Setor:** Fiscal")
 
     # --- KPIs ---
     c1, c2, c3, c4 = st.columns(4)
@@ -89,7 +98,7 @@ try:
 
     st.markdown("---")
 
-    # --- 3. HISTÓRICO DE VENDAS (Nomes dinâmicos) ---
+    # --- 3. HISTÓRICO DE VENDAS ---
     df_vendas = df_global.copy()
     if corte_selecionado:
         df_vendas = df_vendas[df_vendas['Descrição'].isin(corte_selecionado)]
@@ -108,17 +117,12 @@ try:
 
     st.markdown("---")
 
-    # --- 4. TABELA FINAL (COM NOMES PERSONALIZADOS) ---
+    # --- 4. TABELA FINAL ---
     st.subheader("📋 Detalhamento com Histórico de Giro")
-    
-    # Renomeando as colunas apenas para a exibição na tabela
     df_tabela = df_vendas.rename(columns=nomes_meses)
-    
-    colunas_finais = [
-        'Código', 'Descrição', 'Estoque', 'Estoque Disponível', 
-        nomes_meses['Venda Mês'], nomes_meses['Venda Mês 1'], 
-        nomes_meses['Venda Mês 2'], nomes_meses['Venda Mês 3']
-    ]
+    colunas_finais = ['Código', 'Descrição', 'Estoque', 'Estoque Disponível', 
+                      nomes_meses['Venda Mês'], nomes_meses['Venda Mês 1'], 
+                      nomes_meses['Venda Mês 2'], nomes_meses['Venda Mês 3']]
     
     st.dataframe(
         df_tabela[colunas_finais].sort_values('Estoque', ascending=False).style.format({
