@@ -17,13 +17,14 @@ def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
     try:
         conn = oracledb.connect(**conn_params)
-        # AJUSTE: Mudamos QTAVARIA para QTAVARIADO (padrão WinThor) para corrigir o erro ORA-00904
+        # SQL Corrigido com aspas duplas para o nome com ponto e novas colunas solicitadas
         query = """SELECT 
                     CODPROD AS "Código", 
                     QTESTGER AS "Estoque", 
-                    QTBLOQUEADA AS "Bloqueado",
-                    QTAVARIADO AS "Avaria",
-                    (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Estoque Disponível",
+                    QTRESERV AS "Reservado",
+                    "Qt.Avaria" AS "Avaria",
+                    (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Disponível",
+                    CUSTOCONT AS "Custo Contábil",
                     QTVENDMES AS "Venda Mês",
                     QTVENDMES1 AS "Venda Mês 1",
                     QTVENDMES2 AS "Venda Mês 2",
@@ -40,15 +41,16 @@ def carregar_dados():
         # Cruzamento de dados
         df_final = pd.merge(df_estoque, df_nomes, on="Código", how="left")
         
-        # FILTRO SOLICITADO: Remove itens sem descrição no Excel
+        # Filtro: Apenas itens que estão no seu Excel
         df_final = df_final.dropna(subset=['Descrição'])
         
-        # ORGANIZAÇÃO DE COLUNAS SOLICITADA
-        colunas = [
-            'Código', 'Descrição', 'Estoque', 'Bloqueado', 'Avaria', 
-            'Estoque Disponível', 'Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3'
+        # Organização das colunas conforme sua solicitação
+        colunas_finais = [
+            'Código', 'Descrição', 'Estoque', 'Reservado', 'Avaria', 
+            'Disponível', 'Custo Contábil', 'Venda Mês', 'Venda Mês 1', 
+            'Venda Mês 2', 'Venda Mês 3'
         ]
-        return df_final[colunas]
+        return df_final[colunas_finais]
     except Exception as e:
         st.error(f"Erro na integração: {e}")
         return None
@@ -62,10 +64,11 @@ df = carregar_dados()
 
 if df is not None:
     # KPIs principais
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Itens no Excel", len(df))
-    c2.metric("Estoque Disponível Total", f"{df['Estoque Disponível'].sum():,.0f} kg")
-    c3.metric("Volume Venda (Mês Atual)", f"{df['Venda Mês'].sum():,.0f} kg")
+    c2.metric("Total Disponível", f"{df['Disponível'].sum():,.0f} kg")
+    c3.metric("Total Reservado", f"{df['Reservado'].sum():,.0f} kg")
+    c4.metric("Custo Total", f"R$ {df['Custo Contábil'].sum():,.2f}")
 
     # --- GRÁFICO GRANDE TOP 20 ESTOQUE ---
     st.subheader("🥩 Top 20 - Maior Volume em Estoque")
@@ -77,7 +80,6 @@ if df is not None:
 
     st.markdown("---")
 
-    # Ranking e Pareto lado a lado
     col_graf, col_tab = st.columns([1, 1])
     with col_graf:
         st.subheader("🏆 Ranking de Vendas (Top 15)")
@@ -93,6 +95,6 @@ if df is not None:
         fig_p = px.line(df_p, x='Descrição', y='% Acumulado', markers=True)
         st.plotly_chart(fig_p, use_container_width=True)
 
-    # DETALHAMENTO GERAL (Com as colunas e filtros ajustados)
+    # DETALHAMENTO GERAL
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(df, use_container_width=True, hide_index=True)
