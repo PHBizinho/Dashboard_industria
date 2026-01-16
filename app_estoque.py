@@ -3,7 +3,7 @@ import oracledb
 import pandas as pd
 import plotly.express as px
 
-# 1. CONEXÃO COM O BANCO (DADOS REAIS DA FILIAL 3)
+# 1. CONFIGURAÇÃO DO AMBIENTE (CLIENTE ORACLE PARA WINDOWS)
 if 'oracle_client_initialized' not in st.session_state:
     try:
         caminho_client = r"C:\oracle\instantclient_19_29"
@@ -17,12 +17,12 @@ def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
     try:
         conn = oracledb.connect(**conn_params)
-        # Query atualizada para trazer Bloqueado, Avaria e todos os meses de venda
+        # AJUSTE: Mudamos QTAVARIA para QTAVARIADO (padrão WinThor) para corrigir o erro ORA-00904
         query = """SELECT 
                     CODPROD AS "Código", 
                     QTESTGER AS "Estoque", 
                     QTBLOQUEADA AS "Bloqueado",
-                    QTAVARIA AS "Avaria",
+                    QTAVARIADO AS "Avaria",
                     (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Estoque Disponível",
                     QTVENDMES AS "Venda Mês",
                     QTVENDMES1 AS "Venda Mês 1",
@@ -37,11 +37,13 @@ def carregar_dados():
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         
-        # Cruzamento de dados e filtros solicitados
+        # Cruzamento de dados
         df_final = pd.merge(df_estoque, df_nomes, on="Código", how="left")
+        
+        # FILTRO SOLICITADO: Remove itens sem descrição no Excel
         df_final = df_final.dropna(subset=['Descrição'])
         
-        # Organização das colunas conforme solicitado
+        # ORGANIZAÇÃO DE COLUNAS SOLICITADA
         colunas = [
             'Código', 'Descrição', 'Estoque', 'Bloqueado', 'Avaria', 
             'Estoque Disponível', 'Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3'
@@ -61,11 +63,11 @@ df = carregar_dados()
 if df is not None:
     # KPIs principais
     c1, c2, c3 = st.columns(3)
-    c1.metric("Produtos no Excel", len(df))
-    c2.metric("Estoque Disponível", f"{df['Estoque Disponível'].sum():,.0f} kg")
-    c3.metric("Venda Total (Mês)", f"{df['Venda Mês'].sum():,.0f} kg")
+    c1.metric("Itens no Excel", len(df))
+    c2.metric("Estoque Disponível Total", f"{df['Estoque Disponível'].sum():,.0f} kg")
+    c3.metric("Volume Venda (Mês Atual)", f"{df['Venda Mês'].sum():,.0f} kg")
 
-    # --- GRÁFICO TOP 20 ESTOQUE (GRANDE) ---
+    # --- GRÁFICO GRANDE TOP 20 ESTOQUE ---
     st.subheader("🥩 Top 20 - Maior Volume em Estoque")
     df_top_est = df.nlargest(20, 'Estoque')
     fig_est = px.bar(df_top_est, x='Descrição', y='Estoque', 
@@ -75,9 +77,8 @@ if df is not None:
 
     st.markdown("---")
 
-    # Gráficos de Venda e Pareto lado a lado
+    # Ranking e Pareto lado a lado
     col_graf, col_tab = st.columns([1, 1])
-
     with col_graf:
         st.subheader("🏆 Ranking de Vendas (Top 15)")
         df_top_venda = df.nlargest(15, 'Venda Mês')
@@ -92,6 +93,6 @@ if df is not None:
         fig_p = px.line(df_p, x='Descrição', y='% Acumulado', markers=True)
         st.plotly_chart(fig_p, use_container_width=True)
 
-    # Detalhamento Geral ajustado
+    # DETALHAMENTO GERAL (Com as colunas e filtros ajustados)
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(df, use_container_width=True, hide_index=True)
