@@ -12,10 +12,9 @@ st.markdown("---")
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# Função para obter nomes dos meses dinamicamente
 def obter_nomes_meses():
     agora = datetime.now()
-    # Para testes em 2026, conforme sua solicitação
+    # Ajuste para garantir a lógica de 2026 conforme solicitado
     if agora.year < 2026:
         agora = datetime(2026, agora.month, 1)
         
@@ -27,7 +26,7 @@ def obter_nomes_meses():
     }
     return meses
 
-@st.cache_data(show_spinner="Sincronizando bases e calculando histórico...")
+@st.cache_data(show_spinner="Sincronizando bases...")
 def carregar_dados():
     df = pd.read_excel("BASE_PILOTO.xlsx")
     df.columns = df.columns.str.strip()
@@ -41,13 +40,10 @@ def carregar_dados():
     df = df[pd.to_numeric(df['Código'], errors='coerce').notnull()]
     df['Código'] = df['Código'].astype(int)
     
-    # Cálculos de Estoque e Valor
+    # Cálculos base
     df['Estoque Disponível'] = df['Estoque'] - df['Reservado'] - df['Qt.Avaria']
     df['Valor Total (R$)'] = df['Estoque'] * df['Custo contábil']
     df['Média Vendas (3m)'] = df[['Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].mean(axis=1)
-    
-    total_val_geral = df['Valor Total (R$)'].sum()
-    df['% Valor'] = (df['Valor Total (R$)'] / total_val_geral) * 100
     
     return df
 
@@ -61,12 +57,25 @@ try:
     df_completo = carregar_dados()
     nomes_meses = obter_nomes_meses()
     
+    # Filtro de Classificação
     peca_selecionada = st.sidebar.multiselect(
         "**Selecione a(as) classificação(ões):**",
         options=sorted(df_completo['Classificação'].unique()),
         default=df_completo['Classificação'].unique()
     )
+    
+    # NOVO: Filtro por Corte Específico (Descrição)
+    cortes_disponiveis = sorted(df_completo[df_completo['Classificação'].isin(peca_selecionada)]['Descrição'].unique())
+    corte_selecionado = st.sidebar.multiselect(
+        "**Filtrar por Corte Específico (Opcional):**",
+        options=cortes_disponiveis,
+        help="Deixe vazio para ver todos da classificação selecionada"
+    )
+
+    # Aplicação dos Filtros
     df = df_completo[df_completo['Classificação'].isin(peca_selecionada)]
+    if corte_selecionado:
+        df = df[df['Descrição'].isin(corte_selecionado)]
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### ✍️ Créditos")
@@ -75,36 +84,14 @@ try:
 
     # --- KPIs ---
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Estoque Total (kg)", f"{df['Estoque'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    c1.metric("Estoque Selecionado (kg)", f"{df['Estoque'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
     c2.metric("Total Reservado (kg)", f"{df['Reservado'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-    c3.metric("Média Vendas (3m)", f"{df['Média Vendas (3m)'].sum():,.2f} kg")
+    c3.metric("Média Vendas (Filtro)", f"{df['Média Vendas (3m)'].sum():,.2f} kg")
     c4.metric("Valor Total", formatar_moeda(df['Valor Total (R$)'].sum()))
 
     st.markdown("---")
 
-    # --- 1. GRÁFICO DE COMPARAÇÃO DE VENDAS (HISTÓRICO) ---
-    st.subheader(f"📈 Comparativo de Vendas: {nomes_meses['Venda Mês 3']} a {nomes_meses['Venda Mês']}")
-    
-    # Preparando dados para o gráfico de barras comparativo
-    df_vendas_total = df[['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].sum().reset_index()
-    df_vendas_total.columns = ['Mês_Ref', 'Volume']
-    df_vendas_total['Mês_Nome'] = df_vendas_total['Mês_Ref'].map(nomes_meses)
-    
-    # Ordenando cronologicamente (do mais antigo para o mais novo)
-    df_vendas_total = df_vendas_total.iloc[::-1]
-
-    fig_hist = px.bar(
-        df_vendas_total, x='Mês_Nome', y='Volume',
-        text=df_vendas_total['Volume'].apply(lambda x: f"<b>{x:,.0f} kg</b>".replace(",", ".")),
-        labels={'Mês_Nome': 'Mês de Referência', 'Volume': 'Volume Total (kg)'},
-        color_discrete_sequence=['#2ecc71']
-    )
-    fig_hist.update_traces(textposition='outside', textfont=dict(color='black', size=14))
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-    st.markdown("---")
-
-    # --- 2. VOLUME DETALHADO POR CORTE (TOP 20) ---
+    # --- 1. VOLUME DETALHADO POR CORTE (TOP 20) ---
     st.subheader("📊 Ranking de Volume em Estoque (Top 20)")
     top_n = df.nlargest(20, 'Estoque').sort_values('Estoque', ascending=True)
     top_n['Rótulo'] = top_n['Estoque'].apply(lambda x: f"<b>{x:,.2f} kg</b>".replace(",", "X").replace(".", ",").replace("X", "."))
@@ -120,10 +107,44 @@ try:
 
     st.markdown("---")
 
-    # --- 3. TABELA DETALHADA COM NOMES DOS MESES DINÂMICOS ---
-    st.subheader("📋 Detalhamento de Estoque e Histórico de Giro")
+    # --- 2. ANÁLISE DE PARETO FINANCEIRO ---
+    st.subheader("🎯 Impacto Financeiro (R$) por Corte Selecionado")
+    df['% Valor'] = (df['Valor Total (R$)'] / df['Valor Total (R$)'].sum()) * 100
+    df_pareto = df.nlargest(15, 'Valor Total (R$)')
+    fig_pareto = px.bar(
+        df_pareto, x='Descrição', y='% Valor',
+        text=df_pareto['% Valor'].apply(lambda x: f"<b>{x:.1f}%</b>"),
+        color='% Valor', color_continuous_scale='Reds'
+    )
+    fig_pareto.update_traces(textposition='outside', textfont=dict(color='black', size=12))
+    st.plotly_chart(fig_pareto, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- 3. GRÁFICO DE COMPARAÇÃO DE VENDAS (AGORA NO FINAL E FILTRÁVEL) ---
+    titulo_vendas = "📈 Comparativo de Vendas (Filtro Atual)"
+    if corte_selecionado:
+        titulo_vendas = f"📈 Histórico de Vendas: {', '.join(corte_selecionado[:2])}" + ("..." if len(corte_selecionado) > 2 else "")
     
-    # Renomeando as colunas apenas para exibição na tabela
+    st.subheader(titulo_vendas)
+    
+    df_vendas_filtrado = df[['Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']].sum().reset_index()
+    df_vendas_filtrado.columns = ['Mês_Ref', 'Volume']
+    df_vendas_filtrado['Mês_Nome'] = df_vendas_filtrado['Mês_Ref'].map(nomes_meses)
+    df_vendas_filtrado = df_vendas_filtrado.iloc[::-1]
+
+    fig_hist = px.bar(
+        df_vendas_filtrado, x='Mês_Nome', y='Volume',
+        text=df_vendas_filtrado['Volume'].apply(lambda x: f"<b>{x:,.0f} kg</b>".replace(",", ".")),
+        color_discrete_sequence=['#2ecc71']
+    )
+    fig_hist.update_traces(textposition='outside', textfont=dict(color='black', size=14))
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- 4. TABELA DETALHADA ---
+    st.subheader("📋 Detalhamento Geral")
     df_view = df.rename(columns=nomes_meses)
     colunas_exibir = ['Código', 'Descrição', 'Estoque', 'Reservado', 'Qt.Avaria', 'Estoque Disponível', 
                       nomes_meses['Venda Mês'], nomes_meses['Venda Mês 1'], nomes_meses['Venda Mês 2'], nomes_meses['Venda Mês 3']]
