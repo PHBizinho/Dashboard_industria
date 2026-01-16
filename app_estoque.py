@@ -1,45 +1,74 @@
-# 3. INTERFACE DO DASHBOARD
+import streamlit as st
+import oracledb
+import pandas as pd
+import plotly.express as px  # Para gráficos mais bonitos
+
+# 1. CONFIGURAÇÃO DO AMBIENTE (CLIENTE ORACLE)
+if 'oracle_client_initialized' not in st.session_state:
+    try:
+        caminho_client = r"C:\oracle\instantclient_19_29"
+        oracledb.init_oracle_client(lib_dir=caminho_client)
+        st.session_state['oracle_client_initialized'] = True
+    except Exception as e:
+        st.error(f"Erro ao carregar Instant Client: {e}")
+
+# 2. FUNÇÃO DE DADOS
+@st.cache_data(ttl=600) # Atualiza a cada 10 min para não sobrecarregar o banco
+def carregar_dados_completos():
+    conn_params = {
+        "user": "NUTRICAO", "password": "nutr1125mmf",
+        "dsn": "192.168.222.20:1521/WINT"
+    }
+    try:
+        conn = oracledb.connect(**conn_params)
+        query = """
+        SELECT CODPROD AS "Código", QTESTGER AS "Estoque", 
+               (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Estoque Disponível",
+               QTVENDMES AS "Venda Mês", QTVENDMES1 AS "Venda Mês 1"
+        FROM MMFRIOS.PCEST WHERE CODFILIAL = 3 AND QTESTGER > 0
+        """
+        df_estoque = pd.read_sql(query, conn)
+        conn.close()
+
+        # Integração com seu Excel de Nomes
+        df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
+        df_nomes.columns = ['Código', 'Descrição']
+        df_final = pd.merge(df_estoque, df_nomes, on="Código", how="left")
+        df_final['Descrição'] = df_final['Descrição'].fillna('NÃO CADASTRADO NO EXCEL')
+        
+        return df_final
+    except Exception as e:
+        st.error(f"Erro no Banco: {e}")
+        return None
+
+# 3. INTERFACE VISUAL
 st.set_page_config(page_title="Estoque Filial 3", layout="wide")
-st.title("📊 Controle de Estoque Real - Setor Fiscal")
-st.markdown("---")
+st.title("📊 Painel de Vendas e Estoque - Filial 3")
 
-df_vendas = carregar_dados_completos()
+df = carregar_dados_completos()
 
-if df_vendas is not None:
-    # --- INDICADORES DE TOPO (KPIs) ---
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total de Itens", len(df_vendas))
-    with col2:
-        venda_total = df_vendas['Venda Mês'].sum()
-        st.metric("Volume Venda Mês", f"{venda_total:,.2f} kg")
-    with col3:
-        estoque_total = df_vendas['Estoque Disponível'].sum()
-        st.metric("Estoque Disponível Total", f"{estoque_total:,.2f} kg")
+if df is not None:
+    # KPIs de Topo
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Itens em Estoque", len(df))
+    m2.metric("Volume Venda (Mês)", f"{df['Venda Mês'].sum():,.0f} kg")
+    m3.metric("Estoque Total", f"{df['Estoque'].sum():,.0f} kg")
 
-    st.markdown("---")
-
-    # --- GRÁFICOS ---
-    tab1, tab2, tab3 = st.tabs(["📊 Ranking de Volume", "📈 Análise de Pareto", "📋 Tabela de Dados"])
+    tab1, tab2, tab3 = st.tabs(["📈 Gráficos de Venda", "📊 Curva Pareto", "📋 Dados Reais"])
 
     with tab1:
-        st.subheader("Top 15 Produtos por Venda no Mês")
-        # Criar gráfico de barras
-        df_ranking = df_vendas.nlargest(15, 'Venda Mês')
-        st.bar_chart(data=df_ranking, x='Descrição', y='Venda Mês')
+        st.subheader("Top 15 Produtos por Volume de Venda")
+        df_top = df.nlargest(15, 'Venda Mês')
+        fig_bar = px.bar(df_top, x='Venda Mês', y='Descrição', orientation='h', 
+                         title="Ranking de Vendas (kg)", color='Venda Mês')
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     with tab2:
-        st.subheader("Curva Pareto (Acumulado de Vendas)")
-        # Lógica do Pareto
-        df_pareto = df_vendas.sort_values(by='Venda Mês', ascending=False).copy()
-        df_pareto['Venda Acumulada'] = df_pareto['Venda Mês'].cumsum()
-        total_vendas = df_pareto['Venda Mês'].sum()
-        df_pareto['% Acumulada'] = (df_pareto['Venda Acumulada'] / total_vendas) * 100
-        
-        # Exibir gráfico de linha para o acumulado
-        st.line_chart(data=df_pareto, x='Descrição', y='% Acumulada')
-        st.info("Os produtos que atingem até 80% da curva representam sua Curva A.")
+        st.subheader("Análise de Pareto (Acumulado)")
+        df_p = df.sort_values("Venda Mês", ascending=False).copy()
+        df_p['%'] = (df_p['Venda Mês'] / df_p['Venda Mês'].sum() * 100).cumsum()
+        fig_pareto = px.line(df_p, x='Descrição', y='%', title="Curva ABC de Vendas")
+        st.plotly_chart(fig_pareto, use_container_width=True)
 
     with tab3:
-        st.success(f"Dados carregados! {len(df_vendas)} itens monitorados.")
-        st.dataframe(df_vendas, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
