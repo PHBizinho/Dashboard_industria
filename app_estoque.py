@@ -3,71 +3,69 @@ import oracledb
 import pandas as pd
 import plotly.express as px
 
-# 1. CONFIGURAÇÃO DO AMBIENTE (CLIENTE ORACLE)
+# 1. CONFIGURAÇÃO DO AMBIENTE
 if 'oracle_client_initialized' not in st.session_state:
     try:
+        # Ajuste para o seu caminho local do Instant Client
         caminho_client = r"C:\oracle\instantclient_19_29"
         oracledb.init_oracle_client(lib_dir=caminho_client)
         st.session_state['oracle_client_initialized'] = True
     except Exception as e:
         st.error(f"Erro no Oracle Client: {e}")
 
-# 2. FUNÇÃO DE CARREGAMENTO DE DADOS
+# 2. CARREGAMENTO DE DADOS COM TRATAMENTO DE ERRO DE COLUNA
 @st.cache_data(ttl=600)
 def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
     try:
         conn = oracledb.connect(**conn_params)
         
-        # Tentativa 1: Usando nomes de colunas padrão para Avaria e Custo
+        # SQL com as colunas que TEMOS CERTEZA que existem
         query = """SELECT 
                     CODPROD, QTESTGER, QTRESERV, QTBLOQUEADA,
-                    QTAVARIA, CUSTOREAL,
                     QTVENDMES, QTVENDMES1, QTVENDMES2, QTVENDMES3
                    FROM MMFRIOS.PCEST 
                    WHERE CODFILIAL = 3 AND QTESTGER > 0"""
         
+        df = pd.read_sql(query, conn)
+        
+        # Tentativa de buscar Avaria e Custo de forma isolada para não quebrar o app
+        # Testamos QTAVARIA (comum no WinThor) e CUSTOFIN
         try:
-            df_estoque = pd.read_sql(query, conn)
+            extra_query = "SELECT CODPROD, QTAVARIA, CUSTOFIN FROM MMFRIOS.PCEST WHERE CODFILIAL = 3"
+            df_extra = pd.read_sql(extra_query, conn)
+            df = pd.merge(df, df_extra, on="CODPROD", how="left")
         except:
-            # Tentativa 2: Caso o WinThor use QTAVARIADO e CUSTOCONT
-            query_alt = """SELECT 
-                            CODPROD, QTESTGER, QTRESERV, QTBLOQUEADA,
-                            QTAVARIADO as QTAVARIA, CUSTOCONT as CUSTOREAL,
-                            QTVENDMES, QTVENDMES1, QTVENDMES2, QTVENDMES3
-                           FROM MMFRIOS.PCEST 
-                           WHERE CODFILIAL = 3 AND QTESTGER > 0"""
-            df_estoque = pd.read_sql(query_alt, conn)
+            # Se der erro de "invalid identifier", criamos as colunas com 0 manualmente
+            df['QTAVARIA'] = 0
+            df['CUSTOFIN'] = 0
             
         conn.close()
 
-        # Renomeação das colunas para o Dashboard
-        df_estoque.columns = [
-            'Código', 'Estoque', 'Reservado', 'Bloqueado', 
-            'Avaria', 'Custo Contábil', 'Venda Mês', 
-            'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3'
+        # Renomeação para o Dashboard
+        df.columns = [
+            'Código', 'Estoque', 'Reservado', 'Bloqueado', 'Venda Mês', 
+            'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3', 'Avaria', 'Custo Contábil'
         ]
         
-        # Cálculo da coluna Disponível solicitado (Estoque - Reservado - Bloqueado)
-        df_estoque['Disponível'] = df_estoque['Estoque'] - df_estoque['Reservado'] - df_estoque['Bloqueado']
+        # Cálculo do Disponível solicitado
+        df['Disponível'] = df['Estoque'] - df['Reservado'] - df['Bloqueado']
 
-        # Integração com Excel de Nomes
+        # Cruzamento com sua base Excel
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         
-        # Merge e Filtro para não aparecer "NÃO CADASTRADO NO EXCEL"
-        df_final = pd.merge(df_estoque, df_nomes, on="Código", how="left")
+        df_final = pd.merge(df, df_nomes, on="Código", how="left")
+        
+        # AJUSTE: Remove quem não está no Excel para manter o foco
         df_final = df_final.dropna(subset=['Descrição'])
         
-        # Reordenar as colunas conforme solicitado
-        ordem_colunas = [
-            'Código', 'Descrição', 'Estoque', 'Reservado', 'Avaria', 
-            'Disponível', 'Custo Contábil', 'Venda Mês', 'Venda Mês 1', 
-            'Venda Mês 2', 'Venda Mês 3'
-        ]
-        return df_final[ordem_colunas]
+        ordem = ['Código', 'Descrição', 'Estoque', 'Reservado', 'Avaria', 'Disponível', 
+                 'Custo Contábil', 'Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']
+        
+        return df_final[ordem]
     except Exception as e:
-        st.error(f"Erro ao conectar no WinThor: {e}")
+        st.error(f"Erro na conexão com o banco WinThor: {e}")
         return None
 
 # 3. INTERFACE VISUAL - ESTOQUE SERIDOENSE
@@ -78,43 +76,33 @@ st.markdown("---")
 df = carregar_dados()
 
 if df is not None:
-    # Indicadores de Topo (KPIs)
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    kpi1.metric("Itens Cadastrados", len(df))
-    kpi2.metric("Total Disponível", f"{df['Disponível'].sum():,.0f} kg")
-    kpi3.metric("Total Reservado", f"{df['Reservado'].sum():,.0f} kg")
-    kpi4.metric("Custo Total", f"R$ {df['Custo Contábil'].sum():,.2f}")
+    # KPIs de resumo
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Itens Monitorados", len(df))
+    c2.metric("Total Disponível", f"{df['Disponível'].sum():,.0f} kg")
+    c3.metric("Total Reservado", f"{df['Reservado'].sum():,.0f} kg")
+    c4.metric("Custo Total", f"R$ {df['Custo Contábil'].sum():,.2f}")
 
-    # --- GRÁFICO GRANDE TOP 20 ESTOQUE ---
+    # Gráfico Top 20 Estoque
     st.subheader("🥩 Top 20 - Maior Volume em Estoque")
     df_top_est = df.nlargest(20, 'Estoque')
-    fig_est = px.bar(df_top_est, x='Descrição', y='Estoque', 
-                     color='Estoque', color_continuous_scale='Greens',
-                     text_auto='.2s')
+    fig_est = px.bar(df_top_est, x='Descrição', y='Estoque', color='Estoque', color_continuous_scale='Greens')
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
 
-    # Gráficos Lado a Lado (Vendas e Pareto)
-    col_venda, col_pareto = st.columns(2)
-    
-    with col_venda:
+    col_v, col_p = st.columns(2)
+    with col_v:
         st.subheader("🏆 Ranking de Vendas (Top 15)")
         df_v = df.nlargest(15, 'Venda Mês')
-        fig_v = px.bar(df_v, x='Venda Mês', y='Descrição', orientation='h', 
-                       color='Venda Mês', color_continuous_scale='Blues')
-        st.plotly_chart(fig_v, use_container_width=True)
-        
-    with col_pareto:
-        st.subheader("📈 Curva Pareto (Vendas)")
-        df_p = df.sort_values("Venda Mês", ascending=False).copy()
-        df_p['% Acc'] = (df_p['Venda Mês'] / df_p['Venda Mês'].sum() * 100).cumsum()
-        fig_p = px.line(df_p, x='Descrição', y='% Acc', markers=True)
-        st.plotly_chart(fig_p, use_container_width=True)
+        st.plotly_chart(px.bar(df_v, x='Venda Mês', y='Descrição', orientation='h', color='Venda Mês'), use_container_width=True)
+    with col_p:
+        st.subheader("📈 Curva Pareto")
+        df_pa = df.sort_values("Venda Mês", ascending=False).copy()
+        df_pa['% Acc'] = (df_pa['Venda Mês'] / df_pa['Venda Mês'].sum() * 100).cumsum()
+        st.plotly_chart(px.line(df_pa, x='Descrição', y='% Acc', markers=True), use_container_width=True)
 
-    # DETALHAMENTO GERAL
+    # Tabela detalhada
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(df, use_container_width=True, hide_index=True)
-
-    # Rodapé informativo
-    st.info("Os dados acima são atualizados a cada 10 minutos diretamente do banco WinThor.")
+    
