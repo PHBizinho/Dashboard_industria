@@ -17,13 +17,12 @@ def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
     try:
         conn = oracledb.connect(**conn_params)
-        # Tentativa final para a coluna com ponto usando aspas duplas exatas
-        # Adicionamos também as colunas solicitadas: Reservado e Custo Contábil
+        # SQL Corrigido: Usando QTAVARIADO (nome técnico padrão no WinThor para evitar erro de identificador)
         query = """SELECT 
                     CODPROD AS "Código", 
                     QTESTGER AS "Estoque", 
                     QTRESERV AS "Reservado",
-                    "Qt.Avaria" AS "Avaria",
+                    QTAVARIADO AS "Avaria",
                     (QTESTGER - QTRESERV - QTBLOQUEADA) AS "Disponível",
                     CUSTOCONT AS "Custo Contábil",
                     QTVENDMES AS "Venda Mês",
@@ -39,11 +38,11 @@ def carregar_dados():
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         
-        # Cruzamento e Filtros
+        # Cruzamento de dados e filtro de itens cadastrados
         df_final = pd.merge(df_estoque, df_nomes, on="Código", how="left")
         df_final = df_final.dropna(subset=['Descrição'])
         
-        # Ordem das colunas conforme sua solicitação
+        # Ordem das colunas solicitada para o Detalhamento Geral
         colunas_finais = [
             'Código', 'Descrição', 'Estoque', 'Reservado', 'Avaria', 
             'Disponível', 'Custo Contábil', 'Venda Mês', 'Venda Mês 1', 
@@ -51,11 +50,10 @@ def carregar_dados():
         ]
         return df_final[colunas_finais]
     except Exception as e:
-        # Se o erro for na coluna Qt.Avaria, avisamos mas não travamos o app
-        st.error(f"Nota: A coluna 'Qt.Avaria' pode estar com nome diferente no banco. Erro: {e}")
+        st.error(f"Erro técnico no banco: {e}")
         return None
 
-# 2. INTERFACE ESTOQUE SERIDOENSE - SETOR FISCAL
+# 2. INTERFACE ESTOQUE SERIDOENSE
 st.set_page_config(page_title="Estoque Seridoense", layout="wide")
 st.title("📦 Estoque Seridoense - Setor Fiscal")
 st.markdown("---")
@@ -63,14 +61,14 @@ st.markdown("---")
 df = carregar_dados()
 
 if df is not None:
-    # KPIs de topo
+    # KPIs principais no topo
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Produtos Mapeados", len(df))
+    c1.metric("Itens Mapeados", len(df))
     c2.metric("Total Disponível", f"{df['Disponível'].sum():,.0f} kg")
     c3.metric("Total Reservado", f"{df['Reservado'].sum():,.0f} kg")
     c4.metric("Custo Contábil Total", f"R$ {df['Custo Contábil'].sum():,.2f}")
 
-    # --- GRÁFICO TOP 20 ESTOQUE ---
+    # --- GRÁFICO GRANDE TOP 20 ESTOQUE ---
     st.subheader("🥩 Top 20 - Maior Volume em Estoque")
     df_top_est = df.nlargest(20, 'Estoque')
     fig_est = px.bar(df_top_est, x='Descrição', y='Estoque', 
@@ -80,7 +78,6 @@ if df is not None:
 
     st.markdown("---")
 
-    # Ranking e Pareto
     col_graf, col_tab = st.columns([1, 1])
     with col_graf:
         st.subheader("🏆 Ranking de Vendas (Top 15)")
