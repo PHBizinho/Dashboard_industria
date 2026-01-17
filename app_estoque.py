@@ -2,107 +2,125 @@ import streamlit as st
 import oracledb
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
-# 1. CONFIGURAÇÃO DO AMBIENTE
+# 1. CONFIGURAÇÃO AMBIENTE
 if 'oracle_client_initialized' not in st.session_state:
     try:
-        # Ajuste para o seu caminho local do Instant Client
-        caminho_client = r"C:\oracle\instantclient_19_29"
-        oracledb.init_oracle_client(lib_dir=caminho_client)
+        # Ajuste o caminho conforme seu Instant Client local
+        oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
         st.session_state['oracle_client_initialized'] = True
     except Exception as e:
-        st.error(f"Erro no Oracle Client: {e}")
+        st.error(f"Erro Client: {e}")
 
-# 2. CARREGAMENTO DE DADOS COM TRATAMENTO DE ERRO DE COLUNA
 @st.cache_data(ttl=600)
 def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
     try:
         conn = oracledb.connect(**conn_params)
-        
-        # SQL com as colunas que TEMOS CERTEZA que existem
-        query = """SELECT 
-                    CODPROD, QTESTGER, QTRESERV, QTBLOQUEADA,
-                    QTVENDMES, QTVENDMES1, QTVENDMES2, QTVENDMES3
-                   FROM MMFRIOS.PCEST 
-                   WHERE CODFILIAL = 3 AND QTESTGER > 0"""
-        
+        # SQL trazendo estoque, custos e histórico de 4 meses
+        query = """SELECT CODPROD, QTESTGER, QTRESERV, QTBLOQUEADA, QTVENDMES, 
+                          QTVENDMES1, QTVENDMES2, QTVENDMES3, CUSTOREAL 
+                   FROM MMFRIOS.PCEST WHERE CODFILIAL = 3 AND QTESTGER > 0"""
         df = pd.read_sql(query, conn)
-        
-        # Tentativa de buscar Avaria e Custo de forma isolada para não quebrar o app
-        # Testamos QTAVARIA (comum no WinThor) e CUSTOFIN
-        try:
-            extra_query = "SELECT CODPROD, QTAVARIA, CUSTOFIN FROM MMFRIOS.PCEST WHERE CODFILIAL = 3"
-            df_extra = pd.read_sql(extra_query, conn)
-            df = pd.merge(df, df_extra, on="CODPROD", how="left")
-        except:
-            # Se der erro de "invalid identifier", criamos as colunas com 0 manualmente
-            df['QTAVARIA'] = 0
-            df['CUSTOFIN'] = 0
-            
         conn.close()
-
-        # Renomeação para o Dashboard
-        df.columns = [
-            'Código', 'Estoque', 'Reservado', 'Bloqueado', 'Venda Mês', 
-            'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3', 'Avaria', 'Custo Contábil'
-        ]
         
-        # Cálculo do Disponível solicitado
-        df['Disponível'] = df['Estoque'] - df['Reservado'] - df['Bloqueado']
-
-        # Cruzamento com sua base Excel
+        # Cruzamento com sua base Excel de descrições
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
+        df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
         
-        df_final = pd.merge(df, df_nomes, on="Código", how="left")
+        # Cálculos de estoque e financeiro
+        df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
+        df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         
-        # AJUSTE: Remove quem não está no Excel para manter o foco
-        df_final = df_final.dropna(subset=['Descrição'])
-        
-        ordem = ['Código', 'Descrição', 'Estoque', 'Reservado', 'Avaria', 'Disponível', 
-                 'Custo Contábil', 'Venda Mês', 'Venda Mês 1', 'Venda Mês 2', 'Venda Mês 3']
-        
-        return df_final[ordem]
+        return df_final
     except Exception as e:
-        st.error(f"Erro na conexão com o banco WinThor: {e}")
+        st.error(f"Erro ao conectar no banco: {e}")
         return None
 
-# 3. INTERFACE VISUAL - ESTOQUE SERIDOENSE
+# 2. INTERFACE ESTOQUE SERIDOENSE
 st.set_page_config(page_title="Estoque Seridoense", layout="wide")
 st.title("📦 Estoque Seridoense - Setor Fiscal")
-st.markdown("---")
 
 df = carregar_dados()
 
 if df is not None:
-    # KPIs de resumo
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Itens Monitorados", len(df))
-    c2.metric("Total Disponível", f"{df['Disponível'].sum():,.0f} kg")
-    c3.metric("Total Reservado", f"{df['Reservado'].sum():,.0f} kg")
-    c4.metric("Custo Total", f"R$ {df['Custo Contábil'].sum():,.2f}")
+    # FILTROS NA LATERAL
+    st.sidebar.header("Filtros de Análise")
+    filtro_nome = st.sidebar.multiselect("Pesquisar Cortes:", options=sorted(df['Descrição'].unique()))
+    
+    df_filtrado = df.copy()
+    if filtro_nome:
+        df_filtrado = df_filtrado[df_filtrado['Descrição'].isin(filtro_nome)]
 
-    # Gráfico Top 20 Estoque
-    st.subheader("🥩 Top 20 - Maior Volume em Estoque")
-    df_top_est = df.nlargest(20, 'Estoque')
-    fig_est = px.bar(df_top_est, x='Descrição', y='Estoque', color='Estoque', color_continuous_scale='Greens')
-    st.plotly_chart(fig_est, use_container_width=True)
+    # --- MUDANÇA 1: GRÁFICO TOP 20 HORIZONTAL ---
+    st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
+    df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
+    
+    # Criando o gráfico horizontal (orientation='h') com números visíveis
+    fig_estoque = px.bar(df_top20, 
+                         x='QTESTGER', 
+                         y='Descrição', 
+                         orientation='h',
+                         color='QTESTGER', 
+                         color_continuous_scale='Greens',
+                         text_auto='.2f', # Exibe os números com 2 casas decimais
+                         labels={'QTESTGER': 'Estoque (kg)', 'Descrição': 'Produto'})
+    
+    # Ajuste para os números ficarem fora da barra se ela for muito curta
+    fig_estoque.update_traces(textposition='outside')
+    fig_estoque.update_layout(height=600, showlegend=False)
+    st.plotly_chart(fig_estoque, use_container_width=True)
 
     st.markdown("---")
 
-    col_v, col_p = st.columns(2)
-    with col_v:
-        st.subheader("🏆 Ranking de Vendas (Top 15)")
-        df_v = df.nlargest(15, 'Venda Mês')
-        st.plotly_chart(px.bar(df_v, x='Venda Mês', y='Descrição', orientation='h', color='Venda Mês'), use_container_width=True)
-    with col_p:
-        st.subheader("📈 Curva Pareto")
-        df_pa = df.sort_values("Venda Mês", ascending=False).copy()
-        df_pa['% Acc'] = (df_pa['Venda Mês'] / df_pa['Venda Mês'].sum() * 100).cumsum()
-        st.plotly_chart(px.line(df_pa, x='Descrição', y='% Acc', markers=True), use_container_width=True)
-
-    # Tabela detalhada
-    st.subheader("📋 Detalhamento Geral")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    # --- MUDANÇA 2: ANÁLISE DE PERFORMANCE E HISTÓRICO ---
+    col1, col2 = st.columns([1.2, 0.8])
     
+    with col1:
+        st.subheader("🏆 Histórico de Vendas")
+        modo_venda = st.radio("Selecione o modo:", ["Mês Atual", "Comparativo 4 Meses"], horizontal=True)
+        
+        if modo_venda == "Mês Atual":
+            df_v = df_filtrado.nlargest(15, 'QTVENDMES')
+            fig_v = px.bar(df_v, x='QTVENDMES', y='Descrição', orientation='h', 
+                           color='QTVENDMES', color_continuous_scale='Blues', text_auto='.1f')
+        else:
+            # Gráfico de comparação entre os meses
+            df_v = df_filtrado.nlargest(10, 'QTVENDMES')
+            fig_v = go.Figure()
+            meses_labels = [('QTVENDMES', 'Atual'), ('QTVENDMES1', 'Mês -1'), 
+                            ('QTVENDMES2', 'Mês -2'), ('QTVENDMES3', 'Mês -3')]
+            for col_v, label_v in meses_labels:
+                fig_v.add_trace(go.Bar(name=label_v, y=df_v['Descrição'], x=df_v[col_v], orientation='h'))
+            fig_v.update_layout(barmode='group', title="Evolução das Vendas (kg)")
+        
+        st.plotly_chart(fig_v, use_container_width=True)
+
+    # --- MUDANÇA 3: PARETO POR VALOR FINANCEIRO (R$) ---
+    with col2:
+        st.subheader("💰 Pareto: Valor Financeiro")
+        df_pareto = df.sort_values("Valor em Estoque", ascending=False).copy()
+        df_pareto['% Acumulado'] = (df_pareto['Valor em Estoque'] / df_pareto['Valor em Estoque'].sum() * 100).cumsum()
+        
+        fig_p = go.Figure()
+        # Barras representando o valor total em estoque
+        fig_p.add_trace(go.Bar(x=df_pareto['Descrição'][:12], y=df_pareto['Valor em Estoque'][:12], 
+                               name="Valor R$", marker_color='gold'))
+        # Linha da Curva de Pareto
+        fig_p.add_trace(go.Scatter(x=df_pareto['Descrição'][:12], y=df_pareto['% Acumulado'][:12], 
+                                   name="% Acumulado", yaxis="y2", line=dict(color="red", width=3)))
+        
+        fig_p.update_layout(title="Impacto Financeiro por Produto",
+                            yaxis2=dict(title="% Acumulado", overlaying="y", side="right", range=[0, 105]))
+        st.plotly_chart(fig_p, use_container_width=True)
+
+    # DETALHAMENTO GERAL - TABELA FINAL
+    st.subheader("📋 Tabela de Dados (Setor Fiscal)")
+    # Reordenando para o formato solicitado: Estoque, Reservado, Disponível, Custo, Vendas...
+    cols_tabela = ['Código', 'Descrição', 'QTESTGER', 'QTRESERV', 'Disponível', 
+                   'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES', 'QTVENDMES1']
+    st.dataframe(df_filtrado[cols_tabela], use_container_width=True, hide_index=True)
+
+    st.info(f"Dashboard rodando no endereço Network: http://192.168.1.19:8502")
