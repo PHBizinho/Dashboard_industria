@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-# 1. CONFIGURAÇÃO AMBIENTE
+# 1. CONFIGURAÇÃO AMBIENTE (WinThor)
 if 'oracle_client_initialized' not in st.session_state:
     try:
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
@@ -28,6 +28,7 @@ def carregar_dados():
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
         
+        # Cálculos fundamentais para o Fiscal
         df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         
@@ -42,6 +43,7 @@ def obter_nomes_meses():
     hoje = datetime.now()
     lista_meses = []
     for i in range(4):
+        # Ajuste dinâmico dos nomes dos meses
         m = hoje.month - i
         y = hoje.year
         while m <= 0: m += 12; y -= 1
@@ -49,17 +51,17 @@ def obter_nomes_meses():
         lista_meses.append(nome)
     return lista_meses
 
-# 2. INTERFACE
+# 2. INTERFACE - DASHBOARD ESTOQUE SERIDOENSE
 st.set_page_config(page_title="Dashboard Estoque - Seridoense", layout="wide")
 
 st.title("📊 Dashboard Estoque - Seridoense")
-st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
+st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*") #
 st.markdown("---")
 
 df = carregar_dados()
 
 if df is not None:
-    # --- NOVO: KPI CARDS NO TOPO ---
+    # --- KPI CARDS (RESUMO GERAL) ---
     total_kg = df['QTESTGER'].sum()
     total_valor = df['Valor em Estoque'].sum()
     total_venda_mes = df['QTVENDMES'].sum()
@@ -74,7 +76,7 @@ if df is not None:
     
     st.markdown("---")
 
-    # --- GRÁFICO 1: VOLUME EM ESTOQUE ---
+    # --- GRÁFICO 1: VOLUME EM ESTOQUE (TOP 20) ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_estoque = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h',
@@ -85,42 +87,44 @@ if df is not None:
 
     st.markdown("---")
 
-    # --- GRÁFICO 2: ANÁLISE DE VENDAS (KG) ---
+    # --- GRÁFICO 2: ANÁLISE DE VENDAS (KG) - FILTRO ISOLADO ---
     st.subheader("🏆 Análise de vendas (KG)")
     nomes_meses = obter_nomes_meses()
     col_grafico, col_filtros = st.columns([4, 1])
     
     with col_filtros:
-        st.markdown("#### 🔍 Filtros")
+        st.markdown("#### 🔍 Filtros do Gráfico")
         modo_venda = st.radio("Período:", ["Mês Atual", "Comparativo 4 Meses"])
-        filtro_nome = st.multiselect("Pesquisar Cortes:", options=sorted(df['Descrição'].unique()))
+        # Este filtro agora só afeta a variável df_vendas_grafico
+        filtro_venda = st.multiselect("Pesquisar Cortes no Gráfico:", options=sorted(df['Descrição'].unique()))
     
-    df_v_filt = df.copy()
-    if filtro_nome:
-        df_v_filt = df_v_filt[df_v_filt['Descrição'].isin(filtro_nome)]
+    # Criando o dataframe isolado para o gráfico
+    df_vendas_grafico = df.copy()
+    if filtro_venda:
+        df_vendas_grafico = df_vendas_grafico[df_vendas_grafico['Descrição'].isin(filtro_venda)]
     
     with col_grafico:
         if modo_venda == "Mês Atual":
-            df_v = df_v_filt.nlargest(15, 'QTVENDMES')
+            df_v = df_vendas_grafico.nlargest(15, 'QTVENDMES')
             fig_v = px.bar(df_v, x='QTVENDMES', y='Descrição', orientation='h', 
                            color='QTVENDMES', color_continuous_scale='Blues',
-                           text_auto='.1f', title=f"Vendas - {nomes_meses[0]}")
+                           text_auto='.1f', title=f"Vendas (kg) - {nomes_meses[0]}")
         else:
-            df_v = df_v_filt.nlargest(12, 'QTVENDMES')
+            df_v = df_vendas_grafico.nlargest(12, 'QTVENDMES')
             fig_v = go.Figure()
             meses_config = [('QTVENDMES', nomes_meses[0]), ('QTVENDMES1', nomes_meses[1]),
                             ('QTVENDMES2', nomes_meses[2]), ('QTVENDMES3', nomes_meses[3])]
             for col_db, nome_label in meses_config:
                 fig_v.add_trace(go.Bar(name=nome_label, y=df_v['Descrição'], x=df_v[col_db], orientation='h'))
-            fig_v.update_layout(barmode='group', title="Evolução Mensal (kg)", height=600)
+            fig_v.update_layout(barmode='group', title="Histórico de Vendas (kg)", height=600)
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
 
-    # --- GRÁFICO 3: PARETO ---
+    # --- GRÁFICO 3: PARETO FINANCEIRO ---
     col_p, _ = st.columns([2, 1])
     with col_p:
-        st.subheader("💰 Pareto: Valor do Estoque Atual (R$)")
+        st.subheader("💰 Pareto: Valor do Estoque Atual (R$)") #
         df_pareto = df.sort_values("Valor em Estoque", ascending=False).copy()
         df_pareto['% Acc'] = (df_pareto['Valor em Estoque'] / df_pareto['Valor em Estoque'].sum() * 100).cumsum()
         fig_p = go.Figure()
@@ -129,10 +133,11 @@ if df is not None:
         fig_p.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105]), height=400, yaxis_tickprefix='R$ ')
         st.plotly_chart(fig_p, use_container_width=True)
 
-    # --- TABELA FINAL: DETALHAMENTO GERAL ---
+    # --- TABELA FINAL: DETALHAMENTO GERAL (NÃO SOFRE FILTRO DO GRÁFICO) ---
     st.subheader("📋 Detalhamento Geral")
+    # Aqui usamos o 'df' original, sem o filtro aplicado no gráfico
     st.dataframe(
-        df_v_filt[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']],
+        df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']],
         use_container_width=True,
         hide_index=True,
         column_config={
