@@ -28,7 +28,7 @@ def carregar_dados():
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
         
-        # Cálculos fundamentais para o Fiscal
+        # Cálculos fundamentais
         df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         
@@ -43,7 +43,7 @@ def obter_nomes_meses():
     hoje = datetime.now()
     lista_meses = []
     for i in range(4):
-        # Ajuste dinâmico dos nomes dos meses
+        # Ajuste dinâmico dos meses
         m = hoje.month - i
         y = hoje.year
         while m <= 0: m += 12; y -= 1
@@ -51,32 +51,37 @@ def obter_nomes_meses():
         lista_meses.append(nome)
     return lista_meses
 
-# 2. INTERFACE - DASHBOARD ESTOQUE SERIDOENSE
+# Função para formatar números no padrão PT-BR (1.234,56)
+def formatar_br(valor):
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+# 2. INTERFACE
 st.set_page_config(page_title="Dashboard Estoque - Seridoense", layout="wide")
 
+# Título e Assinatura
 st.title("📊 Dashboard Estoque - Seridoense")
-st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*") #
+st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
 st.markdown("---")
 
 df = carregar_dados()
 
 if df is not None:
-    # --- KPI CARDS (RESUMO GERAL) ---
+    # --- KPI CARDS COM FORMATAÇÃO BRASILEIRA ---
     total_kg = df['QTESTGER'].sum()
     total_valor = df['Valor em Estoque'].sum()
     total_venda_mes = df['QTVENDMES'].sum()
     
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
     with col_kpi1:
-        st.metric("Total de Estoque (Kg)", f"{total_kg:,.2f} Kg")
+        st.metric("Total de Estoque (Kg)", f"{formatar_br(total_kg)} Kg")
     with col_kpi2:
-        st.metric("Valor Total Imobilizado", f"R$ {total_valor:,.2f}")
+        st.metric("Valor Total Imobilizado", f"R$ {formatar_br(total_valor)}")
     with col_kpi3:
-        st.metric(f"Venda Total {obter_nomes_meses()[0]}", f"{total_venda_mes:,.2f} Kg")
+        st.metric(f"Venda Total {obter_nomes_meses()[0]}", f"{formatar_br(total_venda_mes)} Kg")
     
     st.markdown("---")
 
-    # --- GRÁFICO 1: VOLUME EM ESTOQUE (TOP 20) ---
+    # --- GRÁFICO 1: VOLUME EM ESTOQUE ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_estoque = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h',
@@ -95,10 +100,9 @@ if df is not None:
     with col_filtros:
         st.markdown("#### 🔍 Filtros do Gráfico")
         modo_venda = st.radio("Período:", ["Mês Atual", "Comparativo 4 Meses"])
-        # Este filtro agora só afeta a variável df_vendas_grafico
+        # Filtro que afeta apenas o gráfico abaixo
         filtro_venda = st.multiselect("Pesquisar Cortes no Gráfico:", options=sorted(df['Descrição'].unique()))
     
-    # Criando o dataframe isolado para o gráfico
     df_vendas_grafico = df.copy()
     if filtro_venda:
         df_vendas_grafico = df_vendas_grafico[df_vendas_grafico['Descrição'].isin(filtro_venda)]
@@ -116,7 +120,7 @@ if df is not None:
                             ('QTVENDMES2', nomes_meses[2]), ('QTVENDMES3', nomes_meses[3])]
             for col_db, nome_label in meses_config:
                 fig_v.add_trace(go.Bar(name=nome_label, y=df_v['Descrição'], x=df_v[col_db], orientation='h'))
-            fig_v.update_layout(barmode='group', title="Histórico de Vendas (kg)", height=600)
+            fig_v.update_layout(barmode='group', title="Evolução de Vendas (kg)", height=600)
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
@@ -133,9 +137,8 @@ if df is not None:
         fig_p.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105]), height=400, yaxis_tickprefix='R$ ')
         st.plotly_chart(fig_p, use_container_width=True)
 
-    # --- TABELA FINAL: DETALHAMENTO GERAL (NÃO SOFRE FILTRO DO GRÁFICO) ---
-    st.subheader("📋 Detalhamento Geral")
-    # Aqui usamos o 'df' original, sem o filtro aplicado no gráfico
+    # --- TABELA FINAL: DETALHAMENTO GERAL (COMPLETA) ---
+    st.subheader("📋 Detalhamento Geral") #
     st.dataframe(
         df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']],
         use_container_width=True,
@@ -148,3 +151,5 @@ if df is not None:
             "QTVENDMES": st.column_config.NumberColumn("Venda Mês Atual (kg)", format="%.2f Kg")
         }
     )
+
+    st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
