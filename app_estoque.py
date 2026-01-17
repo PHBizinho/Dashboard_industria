@@ -28,7 +28,6 @@ def carregar_dados():
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
         
-        # Cálculos de Estoque
         df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         
@@ -43,13 +42,10 @@ def obter_nomes_meses():
     hoje = datetime.now()
     lista_meses = []
     for i in range(4):
-        # Lógica para retroceder meses corretamente
-        data = (hoje.replace(day=1) - timedelta(days=1 if i > 0 else 0))
-        if i == 1: data = hoje.replace(day=1) - timedelta(days=1)
-        if i == 2: data = (hoje.replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)
-        if i == 3: data = ((hoje.replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)).replace(day=1) - timedelta(days=1)
-        
-        nome = f"{meses_pt[data.month]}/{str(data.year)[2:]}"
+        m = hoje.month - i
+        y = hoje.year
+        while m <= 0: m += 12; y -= 1
+        nome = f"{meses_pt[m]}/{str(y)[2:]}"
         lista_meses.append(nome)
     return lista_meses
 
@@ -57,28 +53,43 @@ def obter_nomes_meses():
 st.set_page_config(page_title="Dashboard Estoque - Seridoense", layout="wide")
 
 st.title("📊 Dashboard Estoque - Seridoense")
-st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*") #
+st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
 st.markdown("---")
 
 df = carregar_dados()
 
 if df is not None:
-    # --- GRÁFICO 1: VOLUME DE ESTOQUE ATUAL ---
+    # --- NOVO: KPI CARDS NO TOPO ---
+    total_kg = df['QTESTGER'].sum()
+    total_valor = df['Valor em Estoque'].sum()
+    total_venda_mes = df['QTVENDMES'].sum()
+    
+    col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+    with col_kpi1:
+        st.metric("Total de Estoque (Kg)", f"{total_kg:,.2f} Kg")
+    with col_kpi2:
+        st.metric("Valor Total Imobilizado", f"R$ {total_valor:,.2f}")
+    with col_kpi3:
+        st.metric(f"Venda Total {obter_nomes_meses()[0]}", f"{total_venda_mes:,.2f} Kg")
+    
+    st.markdown("---")
+
+    # --- GRÁFICO 1: VOLUME EM ESTOQUE ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_estoque = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h',
                          color='QTESTGER', color_continuous_scale='Greens',
-                         text_auto='.2f', labels={'QTESTGER': 'Estoque (kg)'})
+                         text_auto='.2f')
     fig_estoque.update_traces(textposition='outside')
     st.plotly_chart(fig_estoque, use_container_width=True)
 
     st.markdown("---")
 
     # --- GRÁFICO 2: ANÁLISE DE VENDAS (KG) ---
-    st.subheader("🏆 Análise de vendas (KG)") 
+    st.subheader("🏆 Análise de vendas (KG)")
     nomes_meses = obter_nomes_meses()
-    
     col_grafico, col_filtros = st.columns([4, 1])
+    
     with col_filtros:
         st.markdown("#### 🔍 Filtros")
         modo_venda = st.radio("Período:", ["Mês Atual", "Comparativo 4 Meses"])
@@ -93,23 +104,21 @@ if df is not None:
             df_v = df_v_filt.nlargest(15, 'QTVENDMES')
             fig_v = px.bar(df_v, x='QTVENDMES', y='Descrição', orientation='h', 
                            color='QTVENDMES', color_continuous_scale='Blues',
-                           text_auto='.1f', title=f"Vendas (kg) - {nomes_meses[0]}")
+                           text_auto='.1f', title=f"Vendas - {nomes_meses[0]}")
         else:
             df_v = df_v_filt.nlargest(12, 'QTVENDMES')
             fig_v = go.Figure()
-            # Mapeamento para os meses retroativos em KG
             meses_config = [('QTVENDMES', nomes_meses[0]), ('QTVENDMES1', nomes_meses[1]),
                             ('QTVENDMES2', nomes_meses[2]), ('QTVENDMES3', nomes_meses[3])]
             for col_db, nome_label in meses_config:
                 fig_v.add_trace(go.Bar(name=nome_label, y=df_v['Descrição'], x=df_v[col_db], orientation='h'))
-            
-            fig_v.update_layout(barmode='group', title="Evolução de Vendas (kg)", height=600)
+            fig_v.update_layout(barmode='group', title="Evolução Mensal (kg)", height=600)
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
 
-    # --- GRÁFICO 3: PARETO FINANCEIRO (ESTOQUE ATUAL) ---
-    col_p, col_vazio = st.columns([2, 1])
+    # --- GRÁFICO 3: PARETO ---
+    col_p, _ = st.columns([2, 1])
     with col_p:
         st.subheader("💰 Pareto: Valor do Estoque Atual (R$)")
         df_pareto = df.sort_values("Valor em Estoque", ascending=False).copy()
