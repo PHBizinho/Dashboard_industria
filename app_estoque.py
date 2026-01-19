@@ -106,7 +106,7 @@ if df is not None:
     )
     
     fig_estoque.update_layout(
-        height=650,
+        height=550,
         margin=dict(l=50, r=120, t=50, b=50),
         xaxis_title="Quantidade em Estoque (Kg)",
         yaxis_title="",
