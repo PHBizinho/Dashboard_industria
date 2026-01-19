@@ -8,6 +8,7 @@ from datetime import datetime
 # 1. CONFIGURAÇÃO AMBIENTE (WinThor)
 if 'oracle_client_initialized' not in st.session_state:
     try:
+        # Ajuste o caminho do client conforme sua instalação
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
         st.session_state['oracle_client_initialized'] = True
     except Exception as e:
@@ -19,11 +20,12 @@ def carregar_dados():
     try:
         conn = oracledb.connect(**conn_params)
         query = """SELECT CODPROD, QTESTGER, QTRESERV, QTBLOQUEADA, QTVENDMES, 
-                          QTVENDMES1, QTVENDMES2, QTVENDMES3, CUSTOREAL 
-                   FROM MMFRIOS.PCEST WHERE CODFILIAL = 3 AND QTESTGER > 0"""
+                           QTVENDMES1, QTVENDMES2, QTVENDMES3, CUSTOREAL 
+                    FROM MMFRIOS.PCEST WHERE CODFILIAL = 3 AND QTESTGER > 0"""
         df = pd.read_sql(query, conn)
         conn.close()
         
+        # Carregando descrições do Excel
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
@@ -56,14 +58,26 @@ def formatar_br(valor):
 # 2. INTERFACE
 st.set_page_config(page_title="Dashboard Estoque - Seridoense", layout="wide")
 
-st.title("📊 Dashboard Estoque - Seridoense")
-st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
+# Cabeçalho com Logo ao lado do Título
+col_logo, col_titulo = st.columns([1, 5])
+
+with col_logo:
+    # Ajuste o nome do arquivo para o nome exato da sua imagem
+    try:
+        st.image("logo_seridoense.png", width=120) 
+    except:
+        st.info("Logo Seridoense")
+
+with col_titulo:
+    st.title("📊 Dashboard Estoque - Seridoense")
+    st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
+
 st.markdown("---")
 
 df = carregar_dados()
 
 if df is not None:
-    # --- KPI CARDS COM FORMATAÇÃO BRASILEIRA ---
+    # --- KPI CARDS ---
     total_kg = df['QTESTGER'].sum()
     total_valor = df['Valor em Estoque'].sum()
     total_venda_mes = df['QTVENDMES'].sum()
@@ -78,7 +92,7 @@ if df is not None:
     
     st.markdown("---")
 
-    # --- GRÁFICO 1: VOLUME EM ESTOQUE (AJUSTE FINO) ---
+    # --- GRÁFICO 1: VOLUME EM ESTOQUE ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     
@@ -86,14 +100,13 @@ if df is not None:
                          color='QTESTGER', color_continuous_scale='Greens',
                          text_auto='.2f')
     
-    # Mantendo os números grandes e pretos
     fig_estoque.update_traces(
         textposition='outside',
-        textfont=dict(size=14, color='black', family="Arial Black") # Reduzi levemente a fonte para 14
+        textfont=dict(size=14, color='black', family="Arial Black")
     )
     
     fig_estoque.update_layout(
-        height=650, # Altura reduzida para melhor equilíbrio visual
+        height=650,
         margin=dict(l=50, r=120, t=50, b=50),
         xaxis_title="Quantidade em Estoque (Kg)",
         yaxis_title="",
@@ -145,7 +158,7 @@ if df is not None:
     fig_p.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105]), height=400)
     st.plotly_chart(fig_p, use_container_width=True)
 
-    # --- TABELA FINAL: DETALHAMENTO GERAL ---
+    # --- TABELA FINAL ---
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(
         df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']],
