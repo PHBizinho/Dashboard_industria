@@ -4,11 +4,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import os
 
 # 1. CONFIGURAÇÃO AMBIENTE (WinThor)
 if 'oracle_client_initialized' not in st.session_state:
     try:
-        # Ajuste o caminho do client conforme sua instalação
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
         st.session_state['oracle_client_initialized'] = True
     except Exception as e:
@@ -25,12 +25,10 @@ def carregar_dados():
         df = pd.read_sql(query, conn)
         conn.close()
         
-        # Carregando descrições do Excel
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
         
-        # Cálculos fundamentais
         df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         
@@ -58,18 +56,18 @@ def formatar_br(valor):
 # 2. INTERFACE
 st.set_page_config(page_title="Dashboard Estoque - Seridoense", layout="wide")
 
-# Cabeçalho com Logo ao lado do Título
+# Cabeçalho com Logo e Título
 col_logo, col_titulo = st.columns([1, 5])
 
 with col_logo:
-    # Ajuste o nome do arquivo para o nome exato da sua imagem
-    try:
-        st.image("MARCA-SERIDOENSE_.png", width=120) 
-    except:
+    nome_arquivo_logo = "MARCA-SERIDOENSE_.png"
+    if os.path.exists(nome_arquivo_logo):
+        st.image(nome_arquivo_logo, width=150)
+    else:
         st.info("Logo Seridoense")
 
 with col_titulo:
-    st.title("📊 Dashboard Estoque - Seridoense")
+    st.title("Dashboard Estoque - Seridoense")
     st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
 
 st.markdown("---")
@@ -92,8 +90,42 @@ if df is not None:
     
     st.markdown("---")
 
+    # --- NOVO BLOCO: RENDIMENTO DOS CORTES ---
+    st.subheader("🥩 Rendimento Médio de Desossa (Cortes Primários)")
+    
+    # Dados de rendimento fornecidos
+    dados_rendimento = {
+        "Corte": ["OSSO (Descarte)", "COXAO MOLE", "COXAO FORA", "PATINHO", "ALCATRA C/ MAMINHA", "PALETA C/ MUSCULO", "CONTRA FILE", "PONTA DE AGULHA", "ACEM", "FILE MIGNON", "PICANHA", "CUPIM"],
+        "Rendimento (%)": [13.75, 12.65, 10.85, 9.45, 8.92, 8.45, 7.85, 7.25, 6.95, 2.24, 1.61, 1.25]
+    }
+    df_rend = pd.DataFrame(dados_rendimento)
+    
+    col_rend_1, col_rend_2 = st.columns([2, 1])
+    
+    with col_rend_1:
+        fig_rend = px.bar(
+            df_rend.sort_values("Rendimento (%)", ascending=True),
+            x="Rendimento (%)", y="Corte",
+            orientation='h',
+            color="Rendimento (%)",
+            color_continuous_scale='Reds',
+            text_auto='.2f'
+        )
+        fig_rend.update_layout(height=450, margin=dict(t=20, b=20), coloraxis_showscale=False)
+        st.plotly_chart(fig_rend, use_container_width=True)
+        
+    with col_rend_2:
+        st.dataframe(
+            df_rend.sort_values("Rendimento (%)", ascending=False),
+            use_container_width=True,
+            hide_index=True,
+            column_config={"Rendimento (%)": st.column_config.NumberColumn(format="%.2f%%")}
+        )
+
+    st.markdown("---")
+
     # --- GRÁFICO 1: VOLUME EM ESTOQUE ---
-    st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
+    st.subheader("📊 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     
     fig_estoque = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h',
@@ -106,7 +138,7 @@ if df is not None:
     )
     
     fig_estoque.update_layout(
-        height=550,
+        height=550, 
         margin=dict(l=50, r=120, t=50, b=50),
         xaxis_title="Quantidade em Estoque (Kg)",
         yaxis_title="",
@@ -172,3 +204,4 @@ if df is not None:
     )
 
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
+    
