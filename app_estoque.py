@@ -9,6 +9,7 @@ import os
 # 1. CONFIGURAÇÃO AMBIENTE (WinThor)
 if 'oracle_client_initialized' not in st.session_state:
     try:
+        # Ajuste o caminho do client de acordo com sua instalação
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
         st.session_state['oracle_client_initialized'] = True
     except Exception as e:
@@ -25,10 +26,12 @@ def carregar_dados():
         df = pd.read_sql(query, conn)
         conn.close()
         
+        # Carregando descrições do arquivo Excel
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
         
+        # Cálculos de estoque
         df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         
@@ -56,11 +59,10 @@ def formatar_br(valor):
 # 2. INTERFACE
 st.set_page_config(page_title="Dashboard Estoque - Seridoense", layout="wide")
 
-# Cabeçalho com Logo e Título
+# Cabeçalho: Logo ao lado do Título
 col_logo, col_titulo = st.columns([1, 5])
-
 with col_logo:
-    nome_arquivo_logo = "MARCA-SERIDOENSE_.png"
+    nome_arquivo_logo = "MARCA-SERIDOENSE_.png" 
     if os.path.exists(nome_arquivo_logo):
         st.image(nome_arquivo_logo, width=150)
     else:
@@ -75,7 +77,7 @@ st.markdown("---")
 df = carregar_dados()
 
 if df is not None:
-    # --- KPI CARDS ---
+    # --- BLOCO 1: KPI CARDS ---
     total_kg = df['QTESTGER'].sum()
     total_valor = df['Valor em Estoque'].sum()
     total_venda_mes = df['QTVENDMES'].sum()
@@ -90,42 +92,68 @@ if df is not None:
     
     st.markdown("---")
 
-    # --- NOVO BLOCO: RENDIMENTO DOS CORTES ---
-    st.subheader("🥩 Rendimento Médio de Desossa (Cortes Primários Traseiro)")
+    # --- BLOCO 2: RENDIMENTO E SIMULADOR DE DESOSSA ---
+    st.subheader("🥩 Rendimento e Simulação de Recebimento")
     
-    # Dados de rendimento fornecidos
     dados_rendimento = {
-        "Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"],
-        "Rendimento (%)": [13.75, 12.65, 10.14, 8.80, 7.59, 7.44, 6.31, 5.12, 3.44, 3.40, 2.90, 2.50, 2.24, 2.14, 1.61, 1.60, 1.30, 0.72, 0.59, 0.17]
+        "Corte": [
+            "OSSO (Descarte)", "COXÃO MOLE", "COXÃO FORA", "PATINHO", 
+            "ALCATRA C/ MAMINHA", "PALETA C/ MÚSCULO", "CONTRA FILÉ", 
+            "PONTA DE AGULHA", "ACÉM", "FILÉ MIGNON", "PICANHA", "CUPIM"
+        ],
+        "Rendimento (%)": [13.75, 12.65, 10.85, 9.45, 8.92, 8.45, 7.85, 7.25, 6.95, 2.24, 1.61, 1.25]
     }
     df_rend = pd.DataFrame(dados_rendimento)
-    
-    col_rend_1, col_rend_2 = st.columns([2, 1])
-    
-    with col_rend_1:
-        fig_rend = px.bar(
-            df_rend.sort_values("Rendimento (%)", ascending=True),
-            x="Rendimento (%)", y="Corte",
-            orientation='h',
-            color="Rendimento (%)",
-            color_continuous_scale='Reds',
-            text_auto='.2f'
-        )
-        fig_rend.update_layout(height=450, margin=dict(t=20, b=20), coloraxis_showscale=False)
-        st.plotly_chart(fig_rend, use_container_width=True)
+
+    # Organização em abas para economizar espaço vertical
+    tab_rend, tab_sim = st.tabs(["📊 Gráfico de Rendimento", "🧮 Simulador de Carga"])
+
+    with tab_rend:
+        col_r1, col_r2 = st.columns([2, 1])
+        with col_r1:
+            fig_rend = px.bar(
+                df_rend.sort_values("Rendimento (%)", ascending=True),
+                x="Rendimento (%)", y="Corte",
+                orientation='h',
+                color="Rendimento (%)",
+                color_continuous_scale='Reds',
+                text_auto='.2f'
+            )
+            fig_rend.update_layout(height=450, margin=dict(t=20, b=20), coloraxis_showscale=False)
+            st.plotly_chart(fig_rend, use_container_width=True)
+        with col_r2:
+            st.dataframe(
+                df_rend.sort_values("Rendimento (%)", ascending=False),
+                use_container_width=True, hide_index=True,
+                column_config={"Rendimento (%)": st.column_config.NumberColumn(format="%.2f%%")}
+            )
+
+    with tab_sim:
+        st.markdown("#### Simular Cortes por Carga Recebida")
+        # Campo digitável para simulação
+        peso_entrada = st.number_input("Informe o peso total de entrada (Kg):", min_value=0.0, value=16000.0, step=500.0)
         
-    with col_rend_2:
-        st.dataframe(
-            df_rend.sort_values("Rendimento (%)", ascending=False),
-            use_container_width=True,
-            hide_index=True,
-            column_config={"Rendimento (%)": st.column_config.NumberColumn(format="%.2f%%")}
-        )
+        if peso_entrada > 0:
+            df_sim = df_rend.copy()
+            df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * peso_entrada
+            
+            st.write(f"**Estimativa de desossa para {formatar_br(peso_entrada)} Kg:**")
+            st.dataframe(
+                df_sim.sort_values('Previsão (Kg)', ascending=False),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Rendimento (%)": st.column_config.NumberColumn(format="%.2f%%"),
+                    "Previsão (Kg)": st.column_config.NumberColumn(format="%.2f Kg")
+                }
+            )
+            total_calc = df_sim['Previsão (Kg)'].sum()
+            st.success(f"Volume Total Estimado: {formatar_br(total_calc)} Kg")
 
     st.markdown("---")
 
-    # --- GRÁFICO 1: VOLUME EM ESTOQUE ---
-    st.subheader("📊 Top 20 - Volume Físico em Estoque (kg)")
+    # --- BLOCO 3: GRÁFICO DE ESTOQUE (Altura 550) ---
+    st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     
     fig_estoque = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h',
@@ -148,7 +176,7 @@ if df is not None:
 
     st.markdown("---")
 
-    # --- GRÁFICO 2: ANÁLISE DE VENDAS ---
+    # --- BLOCO 4: ANÁLISE DE VENDAS ---
     st.subheader("🏆 Análise de vendas (KG)")
     nomes_meses = obter_nomes_meses()
     col_grafico, col_filtros = st.columns([4, 1])
@@ -179,7 +207,7 @@ if df is not None:
 
     st.markdown("---")
 
-    # --- GRÁFICO 3: PARETO FINANCEIRO ---
+    # --- BLOCO 5: PARETO FINANCEIRO ---
     st.subheader("💰 Pareto: Valor do Estoque Atual (R$)")
     df_pareto = df.sort_values("Valor em Estoque", ascending=False).copy()
     df_pareto['% Acc'] = (df_pareto['Valor em Estoque'] / df_pareto['Valor em Estoque'].sum() * 100).cumsum()
@@ -190,7 +218,7 @@ if df is not None:
     fig_p.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105]), height=400)
     st.plotly_chart(fig_p, use_container_width=True)
 
-    # --- TABELA FINAL ---
+    # --- BLOCO 6: TABELA DE DETALHAMENTO ---
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(
         df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']],
