@@ -95,8 +95,8 @@ if df is not None:
     
     # Dados de rendimento fornecidos
     dados_rendimento = {
-        "Corte": ["OSSO (Descarte)", "COXAO MOLE", "COXAO FORA", "PATINHO", "ALCATRA C/ MAMINHA", "PALETA C/ MUSCULO", "CONTRA FILE", "PONTA DE AGULHA", "ACEM", "FILE MIGNON", "PICANHA", "CUPIM"],
-        "Rendimento (%)": [13.75, 12.65, 10.85, 9.45, 8.92, 8.45, 7.85, 7.25, 6.95, 2.24, 1.61, 1.25]
+        "Corte": ["OSSO (Descarte)", "COXAO MOLE", "CONTRAFILE", "COXÃO DURO", "CARNE BOV (LIMPEZA)", "PATINHO", "MUSCULO TRASEIRO", "CORAÇÃO ALCATRA", "CAPA CONTRAFILE", "LOMBO PAULISTA", "OSSO SERRA", "FRALDA BOV", "FILE MIGNON", "MAMINHA BOV", "PICANHA", "COSTELINHA CONTRAFILE", "SEBO", "OSSO PATINHO", "ARANHA", "FILEZINHO MOCOTO"],
+        "Rendimento (%)": [13.75, 12.65, 10.14, 8.80, 7.59, 7.44, 6.31, 5.12, 3.44, 3.40, 2.90, 2.50, 2.24, 2.14, 1.61, 1.60, 1.30, 0.72, 0.59, 0.17]
     }
     df_rend = pd.DataFrame(dados_rendimento)
     
@@ -204,4 +204,3 @@ if df is not None:
     )
 
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
-    
