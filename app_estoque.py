@@ -91,11 +91,11 @@ if df is not None:
     st.markdown("---")
 
     # --- NOVO BLOCO: RENDIMENTO DOS CORTES ---
-    st.subheader("🥩 Rendimento Médio de Desossa (Cortes Primários)")
+    st.subheader("🥩 Rendimento Médio de Desossa (Cortes Primários Traseiro)")
     
     # Dados de rendimento fornecidos
     dados_rendimento = {
-        "Corte": ["OSSO (Descarte)", "COXAO MOLE", "CONTRAFILE", "COXÃO DURO", "CARNE BOV (LIMPEZA)", "PATINHO", "MUSCULO TRASEIRO", "CORAÇÃO ALCATRA", "CAPA CONTRAFILE", "LOMBO PAULISTA", "OSSO SERRA", "FRALDA BOV", "FILE MIGNON", "MAMINHA BOV", "PICANHA", "COSTELINHA CONTRAFILE", "SEBO", "OSSO PATINHO", "ARANHA", "FILEZINHO MOCOTO"],
+        "Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"],
         "Rendimento (%)": [13.75, 12.65, 10.14, 8.80, 7.59, 7.44, 6.31, 5.12, 3.44, 3.40, 2.90, 2.50, 2.24, 2.14, 1.61, 1.60, 1.30, 0.72, 0.59, 0.17]
     }
     df_rend = pd.DataFrame(dados_rendimento)
