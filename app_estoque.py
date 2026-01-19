@@ -78,7 +78,7 @@ if df is not None:
     
     st.markdown("---")
 
-    # --- GRÁFICO 1: VOLUME EM ESTOQUE (OTIMIZADO) ---
+    # --- GRÁFICO 1: VOLUME EM ESTOQUE (AJUSTE FINO) ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     
@@ -86,14 +86,14 @@ if df is not None:
                          color='QTESTGER', color_continuous_scale='Greens',
                          text_auto='.2f')
     
-    # Ajustes para melhor visibilidade
+    # Mantendo os números grandes e pretos
     fig_estoque.update_traces(
         textposition='outside',
-        textfont=dict(size=16, color='black', family="Arial Black")
+        textfont=dict(size=14, color='black', family="Arial Black") # Reduzi levemente a fonte para 14
     )
     
     fig_estoque.update_layout(
-        height=850, # Gráfico maior para melhor leitura
+        height=650, # Altura reduzida para melhor equilíbrio visual
         margin=dict(l=50, r=120, t=50, b=50),
         xaxis_title="Quantidade em Estoque (Kg)",
         yaxis_title="",
@@ -129,7 +129,7 @@ if df is not None:
             for col_db, nome_label in [('QTVENDMES', nomes_meses[0]), ('QTVENDMES1', nomes_meses[1]),
                                        ('QTVENDMES2', nomes_meses[2]), ('QTVENDMES3', nomes_meses[3])]:
                 fig_v.add_trace(go.Bar(name=nome_label, y=df_v['Descrição'], x=df_v[col_db], orientation='h'))
-            fig_v.update_layout(barmode='group', height=600)
+            fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
@@ -142,7 +142,7 @@ if df is not None:
     fig_p = go.Figure()
     fig_p.add_trace(go.Bar(x=df_pareto['Descrição'][:10], y=df_pareto['Valor em Estoque'][:10], name="Valor R$", marker_color='gold'))
     fig_p.add_trace(go.Scatter(x=df_pareto['Descrição'][:10], y=df_pareto['% Acc'][:10], name="% Acumulado", yaxis="y2", line=dict(color="red")))
-    fig_p.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105]), height=450)
+    fig_p.update_layout(yaxis2=dict(overlaying="y", side="right", range=[0, 105]), height=400)
     st.plotly_chart(fig_p, use_container_width=True)
 
     # --- TABELA FINAL: DETALHAMENTO GERAL ---
