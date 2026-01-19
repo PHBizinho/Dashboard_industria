@@ -64,7 +64,7 @@ col_logo, col_titulo = st.columns([1, 5])
 with col_logo:
     # Ajuste o nome do arquivo para o nome exato da sua imagem
     try:
-        st.image("MARCA-SERIDOENSE_", width=120) 
+        st.image("MARCA-SERIDOENSE_.png", width=120) 
     except:
         st.info("Logo Seridoense")
 
