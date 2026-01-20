@@ -46,7 +46,7 @@ def salvar_dados_desossa(dados_dict):
     else:
         df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
-    st.success("✅ Lançamento de desossa salvo com sucesso!")
+    st.success(f"✅ Desossa da NF {dados_dict['NF']} salva com sucesso!")
 
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -93,86 +93,81 @@ if df is not None:
     with tab_rend:
         dados_rendimento = {
             "Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"],
-            "Rendimento (%)": [14.56, 13.4, 10.74, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]
+            "Rendimento (%)": [14.56, 13.4, 10.74, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.19]
         }
         df_rend = pd.DataFrame(dados_rendimento)
         col_r1, col_r2 = st.columns([2, 1])
         with col_r1:
             fig_rend = px.bar(df_rend.sort_values("Rendimento (%)", ascending=True), x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f')
-            fig_rend.update_layout(height=450, coloraxis_showscale=False, margin=dict(t=20, b=20))
+            fig_rend.update_layout(height=450, coloraxis_showscale=False)
             st.plotly_chart(fig_rend, use_container_width=True)
         with col_r2:
             st.dataframe(df_rend.sort_values("Rendimento (%)", ascending=False), use_container_width=True, hide_index=True)
 
     with tab_sim:
-        p_entrada = st.number_input("Informe o peso total de entrada (Kg):", min_value=0.0, value=25000.0)
+        p_entrada = st.number_input("Informe o peso para simular (Kg):", min_value=0.0, value=25000.0)
         df_sim = df_rend.copy()
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True, column_config={"Previsão (Kg)": st.column_config.NumberColumn(format="%.2f Kg")})
-        st.success(f"Volume Total Estimado: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg")
 
     with tab_lancto:
         with st.form("registro_diario"):
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4, c5 = st.columns(5)
             f_data = c1.date_input("Data", datetime.now())
-            f_forn = c2.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
-            f_peso = c3.number_input("Peso Carcaça (Kg)", min_value=0.0)
+            f_nf = c2.text_input("Nº Nota Fiscal")
+            f_forn = c3.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
+            f_pecas = c4.number_input("Qtd Peças", min_value=0, step=1)
+            f_peso = c5.number_input("Peso total desossado", min_value=0.0)
+            
             st.markdown("**Pesos Reais por Corte (Kg):**")
             cortes_completos = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
-            res_valores = {"DATA": f_data, "FORNECEDOR": f_forn, "ENTRADA": f_peso}
+            
+            res_valores = {"DATA": f_data, "NF": f_nf, "FORNECEDOR": f_forn, "PECAS": f_pecas, "ENTRADA": f_peso}
             cols_form = st.columns(2)
             for i, corte in enumerate(cortes_completos):
                 with (cols_form[0] if i % 2 == 0 else cols_form[1]):
                     res_valores[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"real_{corte}")
+            
             if st.form_submit_button("💾 Salvar Registro Diário"):
-                if f_peso > 0: salvar_dados_desossa(res_valores)
-                else: st.error("Peso de entrada obrigatório.")
+                if f_peso > 0 and f_nf != "":
+                    salvar_dados_desossa(res_valores)
+                else:
+                    st.error("Campos de NF e Peso total desossado são obrigatórios.")
 
     st.markdown("---")
 
-    # --- BLOCO 3: GRÁFICO DE ESTOQUE (AUMENTADO) ---
+    # --- BLOCO 3: GRÁFICO DE ESTOQUE (GRANDE) ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
-    
-    # Aumentando a altura e as margens para visualização clara
-    fig_est.update_layout(
-        height=700, 
-        margin=dict(l=50, r=100, t=20, b=20),
-        coloraxis_showscale=False,
-        xaxis_title="Quantidade em Estoque (Kg)",
-        yaxis_title=""
-    )
+    fig_est.update_layout(height=700, margin=dict(l=50, r=100, t=20, b=20), coloraxis_showscale=False)
     fig_est.update_traces(textposition='outside', textfont=dict(size=12, family="Arial Black"))
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
 
-    # --- BLOCO 4: ANÁLISE DE VENDAS (RESTAURADO COM FILTROS) ---
+    # --- BLOCO 4: ANÁLISE DE VENDAS (COM FILTROS) ---
     st.subheader("🏆 Análise de Vendas (KG)")
     nomes_meses = obter_nomes_meses()
     col_grafico, col_filtros = st.columns([4, 1])
     
     with col_filtros:
-        st.markdown("#### 🔍 Filtros")
         modo_venda = st.radio("Período:", ["Mês Atual", "Comparativo 4 Meses"])
         filtro_venda = st.multiselect("Pesquisar Cortes:", options=sorted(df['Descrição'].unique()))
     
-    df_vendas_grafico = df.copy()
+    df_v_filtrado = df.copy()
     if filtro_venda:
-        df_vendas_grafico = df_vendas_grafico[df_vendas_grafico['Descrição'].isin(filtro_venda)]
+        df_v_filtrado = df_v_filtrado[df_v_filtrado['Descrição'].isin(filtro_venda)]
     
     with col_grafico:
         if modo_venda == "Mês Atual":
-            df_v = df_vendas_grafico.nlargest(15, 'QTVENDMES')
-            fig_v = px.bar(df_v, x='QTVENDMES', y='Descrição', orientation='h', color='QTVENDMES', color_continuous_scale='Blues', text_auto='.1f')
-            fig_v.update_layout(height=500)
+            fig_v = px.bar(df_v_filtrado.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color='QTVENDMES', color_continuous_scale='Blues', text_auto='.1f')
         else:
-            df_v = df_vendas_grafico.nlargest(12, 'QTVENDMES')
             fig_v = go.Figure()
-            for i, (col_db, nome_label) in enumerate([('QTVENDMES', nomes_meses[0]), ('QTVENDMES1', nomes_meses[1]), ('QTVENDMES2', nomes_meses[2]), ('QTVENDMES3', nomes_meses[3])]):
-                fig_v.add_trace(go.Bar(name=nome_label, y=df_v['Descrição'], x=df_v[col_db], orientation='h'))
-            fig_v.update_layout(barmode='group', height=600, margin=dict(t=20, b=20))
+            df_comp = df_v_filtrado.nlargest(12, 'QTVENDMES')
+            for i, col_db in enumerate(['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']):
+                fig_v.add_trace(go.Bar(name=nomes_meses[i], y=df_comp['Descrição'], x=df_comp[col_db], orientation='h'))
+            fig_v.update_layout(barmode='group', height=550)
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
@@ -189,15 +184,6 @@ if df is not None:
 
     # --- BLOCO 6: DETALHAMENTO ---
     st.subheader("📋 Detalhamento Geral de Estoque")
-    st.dataframe(
-        df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']], 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "QTESTGER": st.column_config.NumberColumn("Estoque (Kg)", format="%.2f"),
-            "CUSTOREAL": st.column_config.NumberColumn("Custo (R$)", format="R$ %.2f"),
-            "Valor em Estoque": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
-        }
-    )
+    st.dataframe(df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque', 'QTVENDMES']], use_container_width=True, hide_index=True)
 
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
