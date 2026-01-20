@@ -43,7 +43,7 @@ def salvar_dados_desossa(dados_dict):
     else:
         df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
-    st.toast(f"✅ Desossa NF {dados_dict['NF']} salva com sucesso!", icon='🥩')
+    st.toast(f"✅ Desossa {dados_dict['TIPO']} NF {dados_dict['NF']} salva!", icon='🥩')
 
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -84,41 +84,34 @@ if df is not None:
     # --- BLOCO RENDIMENTO E DESOSSA ---
     st.subheader("🥩 Rendimento e Simulação de Recebimento")
     tab_rend, tab_sim, tab_lancto, tab_consulta = st.tabs([
-        "📊 Gráfico de Rendimento", 
-        "🧮 Simulador de Carga", 
-        "📝 Registro Real Diário",
-        "🔍 Histórico e Consulta"
+        "📊 Gráfico de Rendimento", "🧮 Simulador de Carga", "📝 Registro Real Diário", "🔍 Histórico e Consulta"
     ])
 
     with tab_rend:
-        dados_rend = {
-            "Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"],
-            "Rendimento (%)": [14.56, 13.4, 10.74, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]
-        }
+        dados_rend = {"Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"], "Rendimento (%)": [14.56, 13.4, 10.74, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]}
         df_rend = pd.DataFrame(dados_rend)
         fig_r = px.bar(df_rend.sort_values("Rendimento (%)", ascending=True), x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f')
         st.plotly_chart(fig_r, use_container_width=True)
 
     with tab_sim:
-        p_entrada = st.number_input("Informe o peso para simular (Kg):", min_value=0.0, value=25000.0)
+        p_entrada = st.number_input("Peso para simular (Kg):", min_value=0.0, value=25000.0)
         df_sim = df_rend.copy()
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
-        
-        total_simulado = df_sim['Previsão (Kg)'].sum()
-        st.info(f"Total Geral Estimado: {formatar_br(total_simulado)} Kg")
+        st.info(f"Total Geral Estimado: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg")
 
     with tab_lancto:
         with st.form("form_desossa", clear_on_submit=True):
-            f1, f2, f3, f4, f5 = st.columns(5)
+            f1, f2, f3, f4, f5, f6 = st.columns(6)
             f_data = f1.date_input("Data", datetime.now())
-            f_nf = f2.text_input("Nº Nota Fiscal")
-            f_forn = f3.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
-            f_pecas = f4.number_input("Qtd Peças", min_value=0)
-            f_peso = f5.number_input("Peso total desossado", min_value=0.0)
+            f_nf = f2.text_input("Nº NF")
+            f_tipo = f3.selectbox("Tipo", ["Boi", "Vaca"])
+            f_forn = f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
+            f_pecas = f5.number_input("Qtd Peças", min_value=0)
+            f_peso = f6.number_input("Peso Total", min_value=0.0)
             
             cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
-            res_val = {"DATA": f_data, "NF": f_nf, "FORNECEDOR": f_forn, "PECAS": f_pecas, "ENTRADA": f_peso}
+            res_val = {"DATA": f_data, "NF": f_nf, "TIPO": f_tipo, "FORNECEDOR": f_forn, "PECAS": f_pecas, "ENTRADA": f_peso}
             
             c_form = st.columns(2)
             for i, corte in enumerate(cortes_lista):
@@ -127,34 +120,14 @@ if df is not None:
             
             if st.form_submit_button("💾 Salvar Registro Diário"):
                 if f_peso > 0 and f_nf:
-                    salvar_dados_desossa(res_val)
-                    st.rerun()
-                else: st.error("Preencha a NF e o Peso Total.")
+                    salvar_dados_desossa(res_val); st.rerun()
+                else: st.error("Preencha NF e Peso.")
 
     with tab_consulta:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
             df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
-            df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
-            
-            # --- FILTROS DE CONSULTA ---
-            st.markdown("#### 🔍 Filtros de Busca")
-            cf1, cf2, cf3 = st.columns([2, 1, 1])
-            
-            with cf1:
-                periodo = st.date_input("Período:", [datetime.now() - timedelta(days=7), datetime.now()])
-            with cf2:
-                sel_nf = st.selectbox("Buscar NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
-            with cf3:
-                sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-            
-            # Aplicar Filtros
-            mask = (df_h['DATA'] >= periodo[0]) & (df_h['DATA'] <= periodo[1])
-            df_f = df_h.loc[mask]
-            if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
-            if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
-            
-            st.dataframe(df_f, use_container_width=True, hide_index=True)
-            st.download_button("📥 Baixar Histórico", df_h.to_csv(index=False).encode('utf-8'), "historico_desossa.csv")
+            st.dataframe(df_h, use_container_width=True, hide_index=True)
+            st.download_button("📥 Baixar CSV", df_h.to_csv(index=False).encode('utf-8'), "historico.csv")
         else: st.info("Sem registros.")
 
     st.markdown("---")
@@ -163,7 +136,6 @@ if df is not None:
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_t20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
-    fig_est.update_layout(height=700)
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
@@ -188,7 +160,18 @@ if df is not None:
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
+    # --- TABELA FINAL COM NOMENCLATURA AJUSTADA ---
     st.subheader("📋 Detalhamento Geral")
-    st.dataframe(df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], use_container_width=True, hide_index=True)
+    st.dataframe(
+        df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
+            "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
+            "CUSTOREAL": st.column_config.NumberColumn("Custo Real", format="R$ %.2f"),
+            "Valor em Estoque": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
+        }
+    )
 
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
