@@ -60,10 +60,13 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- FUNÇÃO PDF COM LAYOUT EM LISTA ORGANIZADA ---
+# --- FUNÇÃO PDF ORGANIZADA ---
 def gerar_pdf_desossa(df_selecionado):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Lista de colunas que não são cortes
+    ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
     
     for index, row in df_selecionado.iterrows():
         pdf.add_page()
@@ -79,7 +82,7 @@ def gerar_pdf_desossa(df_selecionado):
         pdf.ln(10)
         
         # Bloco de Informações Gerais
-        pdf.set_fill_color(200, 0, 0) # Vermelho Seridoense (aproximado)
+        pdf.set_fill_color(200, 0, 0)
         pdf.set_text_color(255, 255, 255)
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, f" DADOS DA CARGA - NF: {row['NF']}", 0, ln=True, fill=True)
@@ -88,7 +91,6 @@ def gerar_pdf_desossa(df_selecionado):
         pdf.set_font("Arial", "B", 10)
         pdf.set_fill_color(245, 245, 245)
         
-        # Grid de informações
         pdf.cell(47, 8, f"Data: {row['DATA']}", 1, 0, 'L', True)
         pdf.cell(47, 8, f"Tipo: {row['TIPO']}", 1, 0, 'L', True)
         pdf.cell(47, 8, f"Pecas: {row['PECAS']}", 1, 0, 'L', True)
@@ -101,28 +103,26 @@ def gerar_pdf_desossa(df_selecionado):
         pdf.set_font("Arial", "B", 11)
         pdf.cell(0, 10, "DETALHAMENTO DA DESOSSA", 0, ln=True)
         
-        # Cabeçalho da Tabela
         pdf.set_font("Arial", "B", 10)
         pdf.set_fill_color(200, 200, 200)
         pdf.cell(140, 8, "Corte / Subproduto", 1, 0, 'L', True)
         pdf.cell(50, 8, "Peso (Kg)", 1, 1, 'C', True)
         
-        # Linhas da Tabela
         pdf.set_font("Arial", "", 10)
         fill = False
         for col in row.index:
-            if col not in ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA'] and row[col] > 0:
+            if col not in ignorar and pd.to_numeric(row[col], errors='coerce') > 0:
                 pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
                 pdf.cell(140, 7, f" {col}", 1, 0, 'L', True)
-                pdf.cell(50, 7, f"{row[col]:.2f}", 1, 1, 'C', True)
+                pdf.cell(50, 7, f"{float(row[col]):.2f}", 1, 1, 'C', True)
                 fill = not fill
         
-        pdf.ln(10)
+        pdf.ln(15)
         pdf.set_font("Arial", "I", 8)
         pdf.cell(0, 10, "______________________________________________________", ln=True, align="C")
         pdf.cell(0, 5, "Assinatura do Responsavel", ln=True, align="C")
 
-    return bytes(pdf.output())
+    return pdf.output(dest='S') # 'S' retorna como string/bytes sem gerar None na tela
 
 # --- 3. INTERFACE ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
@@ -163,7 +163,6 @@ if df is not None:
         df_sim = df_rend.copy()
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
-        # RECOLOCANDO O TOTAL DO SIMULADOR
         st.info(f"**Total Geral Estimado: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
     with tab_lancto:
@@ -215,11 +214,11 @@ if df is not None:
             
             if not df_f.empty:
                 try:
-                    pdf_data = gerar_pdf_desossa(df_f)
+                    pdf_bytes = gerar_pdf_desossa(df_f)
                     st.download_button(
-                        label="📄 Baixar Relatório PDF Organizado",
-                        data=pdf_data,
-                        file_name=f"Relatorio_Desossa_{datetime.now().strftime('%d_%m_%Y')}.pdf",
+                        label="📄 Baixar Relatório PDF",
+                        data=pdf_bytes,
+                        file_name=f"Desossa_Seridoense_{datetime.now().strftime('%d_%m_%Y')}.pdf",
                         mime="application/pdf"
                     )
                 except Exception as e:
@@ -227,8 +226,6 @@ if df is not None:
         else: st.info("Sem registros.")
 
     st.markdown("---")
-
-    # --- RESTANTE DO DASHBOARD ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_t20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
@@ -236,7 +233,6 @@ if df is not None:
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
-
     st.subheader("🏆 Análise de Vendas (KG)")
     col_g, col_f = st.columns([4, 1])
     with col_f:
