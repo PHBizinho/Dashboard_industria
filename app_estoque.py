@@ -91,6 +91,8 @@ if df is not None:
         dados_rend = {"Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"], "Rendimento (%)": [14.56, 13.4, 10.74, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]}
         df_rend = pd.DataFrame(dados_rend)
         fig_r = px.bar(df_rend.sort_values("Rendimento (%)", ascending=True), x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f')
+        # Aumentando o tamanho dos números percentuais nas barras
+        fig_r.update_traces(textfont_size=16, textposition='inside')
         st.plotly_chart(fig_r, use_container_width=True)
 
     with tab_sim:
@@ -126,16 +128,39 @@ if df is not None:
     with tab_consulta:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
             df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
-            st.dataframe(df_h, use_container_width=True, hide_index=True)
-            st.download_button("📥 Baixar CSV", df_h.to_csv(index=False).encode('utf-8'), "historico.csv")
+            df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
+            
+            st.markdown("#### 🔍 Filtros de Busca")
+            cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
+            with cf1:
+                periodo = st.date_input("Período:", [datetime.now() - timedelta(days=7), datetime.now()])
+            with cf2:
+                sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
+            with cf3:
+                sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
+            with cf4:
+                # NOVO FILTRO BOI/VACA NA CONSULTA
+                sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+            
+            # Aplicar Filtros
+            mask = (df_h['DATA'] >= periodo[0]) & (df_h['DATA'] <= periodo[1])
+            df_f = df_h.loc[mask]
+            if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
+            if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
+            if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
+            
+            st.dataframe(df_f, use_container_width=True, hide_index=True)
+            st.download_button("📥 Baixar Histórico", df_h.to_csv(index=False).encode('utf-8'), "historico_desossa.csv")
         else: st.info("Sem registros.")
 
     st.markdown("---")
 
-    # --- ESTOQUE E VENDAS ---
+    # --- ESTOQUE AMPLIADO ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_t20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
+    # Aumentando a altura do gráfico para 900 pixels
+    fig_est.update_layout(height=900, coloraxis_showscale=False)
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
@@ -143,8 +168,8 @@ if df is not None:
     st.subheader("🏆 Análise de Vendas (KG)")
     col_g, col_f = st.columns([4, 1])
     with col_f:
-        modo = st.radio("Visão:", ["Mês Atual", "Comparativo"])
-        filtro = st.multiselect("Cortes:", sorted(df['Descrição'].unique()))
+        modo = st.radio("Visão de Vendas:", ["Mês Atual", "Comparativo"])
+        filtro = st.multiselect("Pesquisar Cortes:", sorted(df['Descrição'].unique()))
     
     df_v = df.copy()
     if filtro: df_v = df_v[df_v['Descrição'].isin(filtro)]
@@ -160,8 +185,8 @@ if df is not None:
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
-    # --- TABELA FINAL COM NOMENCLATURA AJUSTADA ---
-    st.subheader("📋 Detalhamento Geral")
+    # --- TABELA FINAL ---
+    st.subheader("📋 Detalhamento Geral de Estoque")
     st.dataframe(
         df[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
         use_container_width=True, 
