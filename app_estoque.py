@@ -25,16 +25,13 @@ def carregar_dados():
                     FROM MMFRIOS.PCEST WHERE CODFILIAL = 3 AND QTESTGER > 0"""
         df = pd.read_sql(query, conn)
         conn.close()
-        
         df_nomes = pd.read_excel("BASE_DESCRICOES_PRODUTOS.xlsx")
         df_nomes.columns = ['Código', 'Descrição']
         df_final = pd.merge(df, df_nomes, left_on="CODPROD", right_on="Código", how="inner")
-        
         df_final['Disponível'] = df_final['QTESTGER'] - df_final['QTRESERV'] - df_final['QTBLOQUEADA']
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         return df_final
     except Exception as e:
-        st.error(f"Erro ao conectar no banco: {e}")
         return None
 
 def salvar_dados_desossa(dados_dict):
@@ -46,7 +43,8 @@ def salvar_dados_desossa(dados_dict):
     else:
         df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
-    st.success(f"✅ Desossa da NF {dados_dict['NF']} salva com sucesso!")
+    # Mensagem de sucesso persistente via toast ou session_state
+    st.toast(f"✅ Desossa NF {dados_dict['NF']} salva com sucesso!", icon='🚀')
 
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -77,18 +75,21 @@ df = carregar_dados()
 
 if df is not None:
     # --- KPIs ---
-    t_kg = df['QTESTGER'].sum()
-    t_val = df['Valor em Estoque'].sum()
     col_k1, col_k2, col_k3 = st.columns(3)
-    col_k1.metric("Estoque Total (Kg)", f"{formatar_br(t_kg)} Kg")
-    col_k2.metric("Valor Imobilizado", f"R$ {formatar_br(t_val)}")
+    col_k1.metric("Estoque Total (Kg)", f"{formatar_br(df['QTESTGER'].sum())} Kg")
+    col_k2.metric("Valor Imobilizado", f"R$ {formatar_br(df['Valor em Estoque'].sum())}")
     col_k3.metric(f"Venda {obter_nomes_meses()[0]}", f"{formatar_br(df['QTVENDMES'].sum())} Kg")
 
     st.markdown("---")
 
     # --- BLOCO 2: RENDIMENTO E ABAS ---
     st.subheader("🥩 Rendimento e Simulação de Recebimento")
-    tab_rend, tab_sim, tab_lancto = st.tabs(["📊 Gráfico de Rendimento", "🧮 Simulador de Carga", "📝 Registro Real Diário"])
+    tab_rend, tab_sim, tab_lancto, tab_consulta = st.tabs([
+        "📊 Gráfico de Rendimento", 
+        "🧮 Simulador de Carga", 
+        "📝 Registro Real Diário",
+        "🔍 Histórico e Consulta"
+    ])
 
     with tab_rend:
         dados_rendimento = {
@@ -99,7 +100,6 @@ if df is not None:
         col_r1, col_r2 = st.columns([2, 1])
         with col_r1:
             fig_rend = px.bar(df_rend.sort_values("Rendimento (%)", ascending=True), x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f')
-            fig_rend.update_layout(height=450, coloraxis_showscale=False)
             st.plotly_chart(fig_rend, use_container_width=True)
         with col_r2:
             st.dataframe(df_rend.sort_values("Rendimento (%)", ascending=False), use_container_width=True, hide_index=True)
@@ -108,10 +108,11 @@ if df is not None:
         p_entrada = st.number_input("Informe o peso para simular (Kg):", min_value=0.0, value=25000.0)
         df_sim = df_rend.copy()
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
-        st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True, column_config={"Previsão (Kg)": st.column_config.NumberColumn(format="%.2f Kg")})
+        st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
 
     with tab_lancto:
-        with st.form("registro_diario"):
+        # Uso do st.form_submit_button com clear_on_submit=True para limpar os campos
+        with st.form("registro_diario", clear_on_submit=True):
             c1, c2, c3, c4, c5 = st.columns(5)
             f_data = c1.date_input("Data", datetime.now())
             f_nf = c2.text_input("Nº Nota Fiscal")
@@ -131,43 +132,58 @@ if df is not None:
             if st.form_submit_button("💾 Salvar Registro Diário"):
                 if f_peso > 0 and f_nf != "":
                     salvar_dados_desossa(res_valores)
+                    st.rerun() # Atualiza a tela e limpa os campos
                 else:
                     st.error("Campos de NF e Peso total desossado são obrigatórios.")
 
+    with tab_consulta:
+        if os.path.exists("DESOSSA_HISTORICO.csv"):
+            df_hist = pd.read_csv("DESOSSA_HISTORICO.csv")
+            cc1, cc2 = st.columns(2)
+            sel_nf = cc1.selectbox("Buscar NF:", ["Todas"] + sorted(df_hist['NF'].astype(str).unique().tolist()))
+            sel_forn = cc2.selectbox("Filtrar Fornecedor:", ["Todos"] + sorted(df_hist['FORNECEDOR'].unique().tolist()))
+            
+            df_filtro = df_hist.copy()
+            if sel_nf != "Todas": df_filtro = df_filtro[df_filtro['NF'].astype(str) == sel_nf]
+            if sel_forn != "Todos": df_filtro = df_filtro[df_filtro['FORNECEDOR'] == sel_forn]
+            
+            st.dataframe(df_filtro, use_container_width=True, hide_index=True)
+            
+            csv = df_hist.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Baixar Planilha de Histórico", csv, "historico_desossa.csv", "text/csv")
+        else:
+            st.info("Nenhum histórico encontrado.")
+
     st.markdown("---")
 
-    # --- BLOCO 3: GRÁFICO DE ESTOQUE (GRANDE) ---
+    # --- BLOCO 3: ESTOQUE (GRANDE) ---
     st.subheader("🥩 Top 20 - Volume Físico em Estoque (kg)")
     df_top20 = df.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_top20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
-    fig_est.update_layout(height=700, margin=dict(l=50, r=100, t=20, b=20), coloraxis_showscale=False)
-    fig_est.update_traces(textposition='outside', textfont=dict(size=12, family="Arial Black"))
+    fig_est.update_layout(height=700, coloraxis_showscale=False)
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
 
-    # --- BLOCO 4: ANÁLISE DE VENDAS (COM FILTROS) ---
+    # --- BLOCO 4: VENDAS ---
     st.subheader("🏆 Análise de Vendas (KG)")
     nomes_meses = obter_nomes_meses()
-    col_grafico, col_filtros = st.columns([4, 1])
+    col_graf, col_fil = st.columns([4, 1])
+    with col_fil:
+        modo_v = st.radio("Período:", ["Mês Atual", "Comparativo"])
+        filtro_v = st.multiselect("Filtrar Cortes:", options=sorted(df['Descrição'].unique()))
     
-    with col_filtros:
-        modo_venda = st.radio("Período:", ["Mês Atual", "Comparativo 4 Meses"])
-        filtro_venda = st.multiselect("Pesquisar Cortes:", options=sorted(df['Descrição'].unique()))
+    df_v = df.copy()
+    if filtro_v: df_v = df_v[df_v['Descrição'].isin(filtro_v)]
     
-    df_v_filtrado = df.copy()
-    if filtro_venda:
-        df_v_filtrado = df_v_filtrado[df_v_filtrado['Descrição'].isin(filtro_venda)]
-    
-    with col_grafico:
-        if modo_venda == "Mês Atual":
-            fig_v = px.bar(df_v_filtrado.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color='QTVENDMES', color_continuous_scale='Blues', text_auto='.1f')
+    with col_graf:
+        if modo_v == "Mês Atual":
+            fig_v = px.bar(df_v.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
         else:
             fig_v = go.Figure()
-            df_comp = df_v_filtrado.nlargest(12, 'QTVENDMES')
             for i, col_db in enumerate(['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']):
-                fig_v.add_trace(go.Bar(name=nomes_meses[i], y=df_comp['Descrição'], x=df_comp[col_db], orientation='h'))
-            fig_v.update_layout(barmode='group', height=550)
+                fig_v.add_trace(go.Bar(name=nomes_meses[i], y=df_v.nlargest(10, 'QTVENDMES')['Descrição'], x=df_v.nlargest(10, 'QTVENDMES')[col_db], orientation='h'))
+            fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
