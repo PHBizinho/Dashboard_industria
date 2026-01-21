@@ -116,7 +116,7 @@ if df_estoque is not None:
     ])
 
     with tab_rend:
-        dados_rend = {"Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"], "Rendimento (%)": [14.56, 13.4, 10.74, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]}
+        dados_rend = {"Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"], "Rendimento (%)": [14.56, 13.4, 10.75, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]}
         df_rend = pd.DataFrame(dados_rend)
         fig_r = px.bar(df_rend.sort_values("Rendimento (%)", ascending=True), x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f')
         st.plotly_chart(fig_r, use_container_width=True)
@@ -131,18 +131,14 @@ if df_estoque is not None:
     with tab_lancto:
         with st.form("form_desossa", clear_on_submit=True):
             f1, f2, f3, f4, f5, f6 = st.columns(6)
-            f_data = f1.date_input("Data", datetime.now())
-            f_nf = f2.text_input("Nº NF")
-            f_tipo = f3.selectbox("Tipo", ["Boi", "Vaca"])
-            f_forn = f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
-            f_pecas = f5.number_input("Qtd Peças", min_value=0)
-            f_peso = f6.number_input("Peso Total", min_value=0.0)
+            f_data = f1.date_input("Data", datetime.now()); f_nf = f2.text_input("Nº NF")
+            f_tipo = f3.selectbox("Tipo", ["Boi", "Vaca"]); f_forn = f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
+            f_pecas = f5.number_input("Qtd Peças", min_value=0); f_peso = f6.number_input("Peso Total", min_value=0.0)
             cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
             res_val = {"DATA": f_data, "NF": f_nf, "TIPO": f_tipo, "FORNECEDOR": f_forn, "PECAS": f_pecas, "ENTRADA": f_peso}
             c_form = st.columns(2)
             for i, corte in enumerate(cortes_lista):
-                with (c_form[0] if i % 2 == 0 else c_form[1]):
-                    res_val[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"inp_{corte}")
+                with (c_form[0] if i % 2 == 0 else c_form[1]): res_val[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"inp_{corte}")
             if st.form_submit_button("💾 Salvar Registro Diário"):
                 if f_peso > 0 and f_nf: salvar_dados_desossa(res_val); st.rerun()
                 else: st.error("Preencha NF e Peso.")
@@ -162,14 +158,20 @@ if df_estoque is not None:
             if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
             if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
             if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
+            
             st.dataframe(df_f, use_container_width=True, hide_index=True)
+            
             if not df_f.empty:
-                # Geração silenciosa do PDF
-                pdf_output = gerar_pdf_final(df_f)
-                st.download_button(label="📄 Baixar PDF", data=pdf_output, file_name="Desossa.pdf", mime="application/pdf")
-        else: st.info("Sem registros.")
+                # O PDF é gerado e passado direto para o botão, eliminando o "None" na tela
+                st.download_button(
+                    label="📄 Baixar Relatório PDF", 
+                    data=gerar_pdf_final(df_f), 
+                    file_name=f"Desossa_Seridoense_{datetime.now().strftime('%d_%m_%Y')}.pdf", 
+                    mime="application/pdf"
+                )
+        else: st.info("Sem registros no histórico.")
 
-    # --- RESTAURAÇÃO DA ANÁLISE DE VENDAS ---
+    # --- ANÁLISE DE VENDAS ---
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     col_g, col_f = st.columns([4, 1])
@@ -184,20 +186,32 @@ if df_estoque is not None:
         if modo == "Mês Atual":
             fig_v = px.bar(df_v.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
         else:
-            fig_v = go.Figure()
-            meses = obter_nomes_meses()
+            fig_v = go.Figure(); meses = obter_nomes_meses()
             vendas_cols = ['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']
             for i, c_v in enumerate(vendas_cols):
                 fig_v.add_trace(go.Bar(name=meses[i], y=df_v.nlargest(10, 'QTVENDMES')['Descrição'], x=df_v.nlargest(10, 'QTVENDMES')[c_v], orientation='h'))
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
+    # AJUSTE 2: Gráfico de Estoque aumentado (height=800)
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
+    fig_est.update_layout(height=800) 
     st.plotly_chart(fig_est, use_container_width=True)
 
+    # AJUSTE 3: Renomeação de colunas e formatação na Tabela Geral
     st.subheader("📋 Detalhamento Geral")
-    st.dataframe(df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], use_container_width=True, hide_index=True)
+    st.dataframe(
+        df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
+            "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
+            "CUSTOREAL": st.column_config.NumberColumn("Custo Real", format="R$ %.2f"),
+            "Valor em Estoque": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
+        }
+    )
 
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
