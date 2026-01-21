@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
-from fpdf import FPDF
 
 # --- 1. CONFIGURAÇÃO AMBIENTE ---
 if 'oracle_client_initialized' not in st.session_state:
@@ -39,10 +38,8 @@ def salvar_dados_desossa(dados_dict):
     arquivo = "DESOSSA_HISTORICO.csv"
     df_novo = pd.DataFrame([dados_dict])
     if os.path.exists(arquivo):
-        try:
-            df_hist = pd.read_csv(arquivo)
-            df_hist = pd.concat([df_hist, df_novo], ignore_index=True)
-        except: df_hist = df_novo
+        df_hist = pd.read_csv(arquivo)
+        df_hist = pd.concat([df_hist, df_novo], ignore_index=True)
     else:
         df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
@@ -62,50 +59,6 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-def gerar_pdf_bytes(df_selecionado):
-    pdf = FPDF()
-    ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
-    for _, row in df_selecionado.iterrows():
-        pdf.add_page()
-        # Ajuste fino da logo para não cortar (Y=12)
-        if os.path.exists("MARCA-SERIDOENSE_.png"):
-            pdf.image("MARCA-SERIDOENSE_.png", 10, 12, 35)
-        
-        pdf.set_font("Arial", "B", 18)
-        pdf.ln(10)
-        pdf.cell(0, 15, "Relatorio de Desossa - Seridoense", ln=True, align="C")
-        pdf.ln(5)
-        
-        pdf.set_fill_color(200, 0, 0); pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, f" DADOS DA CARGA - NF: {row['NF']}", 0, ln=True, fill=True)
-        
-        pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 10); pdf.set_fill_color(240, 240, 240)
-        pdf.cell(47, 8, f"Data: {row['DATA']}", 1, 0, 'L', True)
-        pdf.cell(47, 8, f"Tipo: {row['TIPO']}", 1, 0, 'L', True)
-        pdf.cell(47, 8, f"Pecas: {row['PECAS']}", 1, 0, 'L', True)
-        pdf.cell(49, 8, f"Peso Total: {row['ENTRADA']} Kg", 1, 1, 'L', True)
-        pdf.ln(5)
-        
-        pdf.set_font("Arial", "B", 11); pdf.cell(0, 10, "DETALHAMENTO DA DESOSSA", 0, ln=True)
-        pdf.set_fill_color(200, 200, 200)
-        pdf.cell(140, 8, "Corte / Subproduto", 1, 0, 'L', True); pdf.cell(50, 8, "Peso (Kg)", 1, 1, 'C', True)
-        
-        pdf.set_font("Arial", "", 10); fill = False
-        for col in row.index:
-            try:
-                val = float(row[col])
-                if col not in ignorar and val > 0:
-                    pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
-                    pdf.cell(140, 7, f" {col}", 1, 0, 'L', True)
-                    pdf.cell(50, 7, f"{val:.2f}", 1, 1, 'C', True)
-                    fill = not fill
-            except: continue
-        pdf.ln(15); pdf.cell(0, 10, "______________________________________________________", ln=True, align="C")
-        pdf.cell(0, 5, "Assinatura do Responsavel", ln=True, align="C")
-    
-    return pdf.output(dest='S') # Retorna a string/bytes correta sem encode manual
-
 # --- 3. INTERFACE ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
@@ -119,6 +72,7 @@ with col_tit:
 df_estoque = carregar_dados()
 
 if df_estoque is not None:
+    # KPIs
     c1, c2, c3 = st.columns(3)
     c1.metric("Estoque Total (Kg)", f"{formatar_br(df_estoque['QTESTGER'].sum())} Kg")
     c2.metric("Valor Imobilizado", f"R$ {formatar_br(df_estoque['Valor em Estoque'].sum())}")
@@ -159,37 +113,50 @@ if df_estoque is not None:
 
     with tab_consulta:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
-            try:
-                df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
-                df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
-                st.markdown("#### 🔍 Filtros de Busca")
-                cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
-                with cf1: periodo = st.date_input("Período:", [datetime.now() - timedelta(days=7), datetime.now()])
-                with cf2: sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
-                with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-                with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+            df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
+            df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
+            st.markdown("#### 🔍 Filtros de Busca")
+            cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
+            with cf1: periodo = st.date_input("Período:", [datetime.now() - timedelta(days=7), datetime.now()])
+            with cf2: sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
+            with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
+            with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+            
+            mask = (df_h['DATA'] >= periodo[0]) & (df_h['DATA'] <= periodo[1])
+            df_f = df_h.loc[mask]
+            if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
+            if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
+            if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
+            
+            st.dataframe(df_f, use_container_width=True, hide_index=True)
+
+            if not df_f.empty:
+                st.markdown("---")
+                st.subheader("📄 Relatório Formato de Impressão")
+                st.caption("Dica: Para salvar ou imprimir, use Ctrl + P e selecione 'Salvar como PDF'")
                 
-                mask = (df_h['DATA'] >= periodo[0]) & (df_h['DATA'] <= periodo[1])
-                df_f = df_h.loc[mask]
-                if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
-                if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
-                if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
-                
-                st.dataframe(df_f, use_container_width=True, hide_index=True)
-                
-                if not df_f.empty:
-                    # GERAÇÃO SEGURA: Somente bytes quando clicado
-                    st.download_button(
-                        label="📄 Baixar Relatório PDF", 
-                        data=gerar_pdf_bytes(df_f), 
-                        file_name=f"Desossa_Seridoense_{datetime.now().strftime('%d_%m_%Y')}.pdf", 
-                        mime="application/pdf"
-                    )
-            except Exception as e:
-                st.error("Erro ao ler histórico. O arquivo pode estar vazio.")
+                # Gerando visualização estilo "Ficha" para cada NF filtrada
+                for _, row in df_f.iterrows():
+                    with st.container(border=True):
+                        c_rel1, c_rel2 = st.columns([1, 3])
+                        with c_rel1: 
+                            if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
+                        with c_rel2:
+                            st.markdown(f"### Relatório de Desossa - NF: {row['NF']}")
+                            st.markdown(f"**Data:** {row['DATA']} | **Fornecedor:** {row['FORNECEDOR']} | **Tipo:** {row['TIPO']}")
+                        
+                        st.markdown(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
+                        
+                        # Lista de cortes (apenas os que possuem valor)
+                        ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
+                        cortes_encontrados = {c: row[c] for c in row.index if c not in ignorar and float(row[c]) > 0}
+                        
+                        df_rel_corte = pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)'])
+                        st.table(df_rel_corte)
+                        st.markdown("---")
         else: st.info("Sem registros no histórico.")
 
-    # --- ANÁLISE DE VENDAS (Restaurado) ---
+    # --- ANÁLISE DE VENDAS ---
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     col_v1, col_v2 = st.columns([4, 1])
@@ -205,23 +172,25 @@ if df_estoque is not None:
             fig_v = px.bar(df_v.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
         else:
             fig_v = go.Figure(); meses = obter_nomes_meses()
-            for i, c_v in enumerate(['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']):
+            vendas_cols = ['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']
+            for i, c_v in enumerate(vendas_cols):
                 fig_v.add_trace(go.Bar(name=meses[i], y=df_v.nlargest(10, 'QTVENDMES')['Descrição'], x=df_v.nlargest(10, 'QTVENDMES')[c_v], orientation='h'))
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
-    # Gráfico de Estoque Top 20 (Grande)
+    # Gráfico de Estoque Top 20
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
     fig_est.update_layout(height=800) 
     st.plotly_chart(fig_est, use_container_width=True)
 
-    # Detalhamento Geral
+    # Tabela Detalhada
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(
         df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
-        use_container_width=True, hide_index=True,
+        use_container_width=True, 
+        hide_index=True,
         column_config={
             "QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
             "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
