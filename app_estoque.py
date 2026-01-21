@@ -29,7 +29,7 @@ if 'oracle_client_initialized' not in st.session_state:
     except Exception as e:
         st.error(f"Erro Client Oracle: {e}")
 
-# --- 2. FUNÇÃO GERADORA DE PDF (VERSÃO SEM LOGO) ---
+# --- 2. FUNÇÃO GERADORA DE PDF (MANTIDA SEM LOGO PARA ENQUADRAMENTO) ---
 def gerar_pdf_tecnico(df_filtrado):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -144,8 +144,15 @@ def obter_nomes_meses():
     return lista
 
 # --- 4. INTERFACE ---
-st.title("Sistema de Inteligência de Estoque e Desossa")
-st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
+# TOPO COM LOGO E TÍTULO LADO A LADO
+col_logo, col_tit = st.columns([1, 5])
+with col_logo:
+    if os.path.exists("MARCA-SERIDOENSE_.png"):
+        st.image("MARCA-SERIDOENSE_.png", width=120)
+
+with col_tit:
+    st.title("Sistema de Inteligência de Estoque e Desossa")
+    st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
 
 df_estoque = carregar_dados()
 
@@ -206,7 +213,6 @@ if df_estoque is not None:
                 st.download_button("📄 Baixar Relatórios em PDF", gerar_pdf_tecnico(df_f), f"Desossa_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
         else: st.info("Nenhum histórico encontrado.")
 
-    # --- ANÁLISE DE ESTOQUE E VENDAS ---
     st.markdown("---")
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     st.plotly_chart(px.bar(df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER'), x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f').update_layout(height=700), use_container_width=True)
@@ -215,7 +221,6 @@ if df_estoque is not None:
     st.subheader("🏆 Análise de Vendas (KG)")
     cv1, cv2 = st.columns([4, 1])
     
-    # FILTRO DE CORTES RESTAURADO AQUI
     with cv2: 
         v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
         filtro_vendas = st.multiselect("Pesquisar Cortes:", sorted(df_estoque['Descrição'].unique()))
@@ -234,7 +239,6 @@ if df_estoque is not None:
                 fig_v.add_trace(go.Bar(name=meses[i], y=top_10['Descrição'], x=top_10[c_v], orientation='h'))
             st.plotly_chart(fig_v.update_layout(barmode='group', height=500), use_container_width=True)
 
-    # --- TABELA DE DETALHAMENTO ---
     st.markdown("---")
     st.subheader("📋 Detalhamento Geral de Itens")
     st.dataframe(
