@@ -6,7 +6,29 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 
-# --- 1. CONFIGURAÇÃO AMBIENTE ---
+# --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO DE IMPRESSÃO ---
+st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
+
+# CSS para esconder elementos do Streamlit na hora da impressão (Ctrl + P)
+st.markdown("""
+    <style>
+    @media print {
+        header, [data-testid="stSidebar"], [data-testid="stHeader"], 
+        .stActionButton, [data-testid="stWidgetLabel"], 
+        button, .stCheckbox, hr {
+            display: none !important;
+        }
+        .main {
+            padding-top: 0 !important;
+        }
+        [data-testid="stMetric"] {
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 if 'oracle_client_initialized' not in st.session_state:
     try:
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
@@ -60,8 +82,6 @@ def obter_nomes_meses():
     return lista
 
 # --- 3. INTERFACE ---
-st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
-
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
     if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=140)
@@ -126,7 +146,7 @@ if df_estoque is not None:
             with cf4: 
                 sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
             
-            # --- FILTRAGEM DINÂMICA (CORREÇÃO DE ATUALIZAÇÃO) ---
+            # --- FILTRAGEM DINÂMICA ---
             df_f = df_h.copy()
             if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
                 df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
@@ -168,7 +188,7 @@ if df_estoque is not None:
 
     st.markdown("---")
     
-    # --- TROCA DE POSIÇÃO SOLICITADA: ESTOQUE PRIMEIRO, VENDAS DEPOIS ---
+    # --- POSIÇÃO AJUSTADA: ESTOQUE EM CIMA, VENDAS EM BAIXO ---
     
     # 1. Gráfico de ESTOQUE
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
@@ -215,3 +235,4 @@ if df_estoque is not None:
     )
 
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
+    
