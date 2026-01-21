@@ -64,33 +64,61 @@ def gerar_pdf_final(df_selecionado):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
+    
     for _, row in df_selecionado.iterrows():
         pdf.add_page()
+        # AJUSTE DA LOGO: Posição Y aumentada para 10 para não cortar no topo
         if os.path.exists("MARCA-SERIDOENSE_.png"):
-            pdf.image("MARCA-SERIDOENSE_.png", 10, 8, 33)
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "Relatorio de Desossa - Seridoense", ln=True, align="C")
+            pdf.image("MARCA-SERIDOENSE_.png", 10, 10, 35)
+        
+        pdf.set_font("Arial", "B", 18)
+        pdf.ln(5)
+        pdf.cell(0, 15, "Relatorio de Desossa - Seridoense", ln=True, align="C")
         pdf.ln(10)
-        pdf.set_fill_color(200, 0, 0); pdf.set_text_color(255, 255, 255)
+        
+        # Cabeçalho Vermelho
+        pdf.set_fill_color(200, 0, 0)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 10, f" DADOS DA CARGA - NF: {row['NF']}", 0, ln=True, fill=True)
-        pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", "B", 10); pdf.set_fill_color(245, 245, 245)
+        
+        # Detalhes da Carga
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", "B", 10)
+        pdf.set_fill_color(240, 240, 240)
         pdf.cell(47, 8, f"Data: {row['DATA']}", 1, 0, 'L', True)
         pdf.cell(47, 8, f"Tipo: {row['TIPO']}", 1, 0, 'L', True)
         pdf.cell(47, 8, f"Pecas: {row['PECAS']}", 1, 0, 'L', True)
         pdf.cell(49, 8, f"Peso Total: {row['ENTRADA']} Kg", 1, 1, 'L', True)
         pdf.ln(5)
-        pdf.set_font("Arial", "B", 11); pdf.cell(0, 10, "DETALHAMENTO DA DESOSSA", 0, ln=True)
+        
+        # Tabela de Cortes
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 10, "DETALHAMENTO DA DESOSSA", 0, ln=True)
         pdf.set_fill_color(200, 200, 200)
-        pdf.cell(140, 8, "Corte / Subproduto", 1, 0, 'L', True); pdf.cell(50, 8, "Peso (Kg)", 1, 1, 'C', True)
-        pdf.set_font("Arial", "", 10); fill = False
+        pdf.cell(140, 8, "Corte / Subproduto", 1, 0, 'L', True)
+        pdf.cell(50, 8, "Peso (Kg)", 1, 1, 'C', True)
+        
+        pdf.set_font("Arial", "", 10)
+        fill = False
         for col in row.index:
-            if col not in ignorar and pd.to_numeric(row[col], errors='coerce') > 0:
-                pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
-                pdf.cell(140, 7, f" {col}", 1, 0, 'L', True); pdf.cell(50, 7, f"{float(row[col]):.2f}", 1, 1, 'C', True)
-                fill = not fill
-        pdf.ln(10); pdf.cell(0, 10, "__________________________________________", ln=True, align="C")
+            # Garante que só mostra colunas de cortes com valor acima de zero
+            try:
+                val = float(row[col])
+                if col not in ignorar and val > 0:
+                    pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
+                    pdf.cell(140, 7, f" {col}", 1, 0, 'L', True)
+                    pdf.cell(50, 7, f"{val:.2f}", 1, 1, 'C', True)
+                    fill = not fill
+            except:
+                continue
+                
+        pdf.ln(15)
+        pdf.set_font("Arial", "I", 9)
+        pdf.cell(0, 10, "______________________________________________________", ln=True, align="C")
         pdf.cell(0, 5, "Assinatura do Responsavel", ln=True, align="C")
-    return bytes(pdf.output())
+        
+    return pdf.output(dest='S').encode('latin-1')
 
 # --- 3. INTERFACE ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
@@ -105,6 +133,7 @@ with col_tit:
 df_estoque = carregar_dados()
 
 if df_estoque is not None:
+    # KPIs Superiores
     c1, c2, c3 = st.columns(3)
     c1.metric("Estoque Total (Kg)", f"{formatar_br(df_estoque['QTESTGER'].sum())} Kg")
     c2.metric("Valor Imobilizado", f"R$ {formatar_br(df_estoque['Valor em Estoque'].sum())}")
@@ -153,6 +182,7 @@ if df_estoque is not None:
             with cf2: sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
             with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
             with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+            
             mask = (df_h['DATA'] >= periodo[0]) & (df_h['DATA'] <= periodo[1])
             df_f = df_h.loc[mask]
             if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
@@ -162,10 +192,11 @@ if df_estoque is not None:
             st.dataframe(df_f, use_container_width=True, hide_index=True)
             
             if not df_f.empty:
-                # O PDF é gerado e passado direto para o botão, eliminando o "None" na tela
+                # CORREÇÃO NONE: O PDF só é gerado no momento exato do download
+                pdf_data = gerar_pdf_final(df_f)
                 st.download_button(
                     label="📄 Baixar Relatório PDF", 
-                    data=gerar_pdf_final(df_f), 
+                    data=pdf_data, 
                     file_name=f"Desossa_Seridoense_{datetime.now().strftime('%d_%m_%Y')}.pdf", 
                     mime="application/pdf"
                 )
@@ -174,15 +205,15 @@ if df_estoque is not None:
     # --- ANÁLISE DE VENDAS ---
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
-    col_g, col_f = st.columns([4, 1])
-    with col_f:
+    col_v1, col_v2 = st.columns([4, 1])
+    with col_v2:
         modo = st.radio("Visão de Vendas:", ["Mês Atual", "Comparativo"])
         filtro_v = st.multiselect("Pesquisar Cortes:", sorted(df_estoque['Descrição'].unique()))
     
     df_v = df_estoque.copy()
     if filtro_v: df_v = df_v[df_v['Descrição'].isin(filtro_v)]
     
-    with col_g:
+    with col_v1:
         if modo == "Mês Atual":
             fig_v = px.bar(df_v.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
         else:
@@ -193,14 +224,14 @@ if df_estoque is not None:
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
-    # AJUSTE 2: Gráfico de Estoque aumentado (height=800)
+    # Gráfico de Estoque Top 20 (Grande conforme solicitado)
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
     fig_est.update_layout(height=800) 
     st.plotly_chart(fig_est, use_container_width=True)
 
-    # AJUSTE 3: Renomeação de colunas e formatação na Tabela Geral
+    # Tabela Detalhada com Colunas Renomeadas e Unidades
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(
         df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
