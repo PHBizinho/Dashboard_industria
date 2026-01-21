@@ -10,7 +10,7 @@ from fpdf import FPDF
 # --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
-# CSS para esconder elementos desnecessários na impressão manual
+# CSS para limpeza de interface
 st.markdown("""
     <style>
     @media print {
@@ -30,7 +30,7 @@ if 'oracle_client_initialized' not in st.session_state:
     except Exception as e:
         st.error(f"Erro Client Oracle: {e}")
 
-# --- 2. FUNÇÃO GERADORA DE PDF (SEM LOGO - FOCO NO TEXTO) ---
+# --- 2. FUNÇÃO GERADORA DE PDF (VERSÃO LIMPA SEM LOGO) ---
 def gerar_pdf_tecnico(df_filtrado):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -38,40 +38,35 @@ def gerar_pdf_tecnico(df_filtrado):
     for _, row in df_filtrado.iterrows():
         pdf.add_page()
         
-        # TÍTULO CENTRALIZADO NO TOPO
+        # Título Centralizado
         pdf.set_y(15)
         pdf.set_font("Arial", 'B', 16)
-        pdf.set_text_color(204, 0, 0) # Vermelho Seridoense
+        pdf.set_text_color(204, 0, 0) 
         pdf.cell(190, 10, "RELATORIO TECNICO DE DESOSSA", 0, 1, 'C')
-        
-        # Espaço entre título e dados
         pdf.ln(10) 
         
-        # 3. CABEÇALHO DA FICHA (Tabela Cinza)
+        # Cabeçalho de Dados da Carga
         pdf.set_font("Arial", 'B', 9)
         pdf.set_fill_color(235, 235, 235)
         pdf.set_text_color(0, 0, 0)
         
-        # Linha 1
         pdf.cell(30, 7, "NF:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['NF']), 1, 0, 'L')
         pdf.cell(30, 7, "DATA:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['DATA']), 1, 1, 'L')
         
-        # Linha 2
         pdf.cell(30, 7, "FORNECEDOR:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['FORNECEDOR']), 1, 0, 'L')
         pdf.cell(30, 7, "TIPO:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['TIPO']), 1, 1, 'L')
         
-        # Linha 3
         pdf.cell(30, 7, "ENTRADA (Kg):", 1, 0, 'L', True)
         pdf.cell(65, 7, f"{float(row['ENTRADA']):.2f}", 1, 0, 'L')
         pdf.cell(30, 7, "PECAS:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['PECAS']), 1, 1, 'L')
         pdf.ln(5)
         
-        # 4. TABELA DE CORTES
+        # Tabela de Cortes
         pdf.set_font("Arial", 'B', 10)
         pdf.set_fill_color(204, 0, 0)
         pdf.set_text_color(255, 255, 255)
@@ -93,28 +88,28 @@ def gerar_pdf_tecnico(df_filtrado):
                         total_saida += valor
                 except: continue
         
-        # 5. RESUMO DE RENDIMENTO
+        # Resumo de Rendimento
         pdf.ln(2)
         pdf.set_font("Arial", 'B', 10)
-        pdf.cell(130, 8, "TOTAL PRODUZIDO (SOMA DOS CORTES)", 0, 0, 'R')
+        pdf.cell(130, 8, "TOTAL PRODUZIDO", 0, 0, 'R')
         pdf.cell(60, 8, f"{total_saida:.2f} Kg", 1, 1, 'R', True)
         
         rendimento = (total_saida / float(row['ENTRADA'])) * 100 if float(row['ENTRADA']) > 0 else 0
-        pdf.cell(130, 8, "RENDIMENTO DA CARGA (%)", 0, 0, 'R')
+        pdf.cell(130, 8, "RENDIMENTO (%)", 0, 0, 'R')
         pdf.cell(60, 8, f"{rendimento:.2f} %", 1, 1, 'R', True)
         
-        # 6. RODAPÉ (Data e Desenvolvedor)
+        # Rodapé Técnico
         pdf.set_y(-25)
         pdf.set_font("Arial", 'I', 8)
         pdf.set_text_color(100, 100, 100)
-        data_geracao = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        pdf.cell(190, 5, f"Relatorio gerado em: {data_geracao}", 0, 1, 'C')
+        agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        pdf.cell(190, 5, f"Relatorio gerado em: {agora}", 0, 1, 'C')
         pdf.set_font("Arial", 'B', 8)
         pdf.cell(190, 5, "Desenvolvido por: Paulo Henrique - Setor Fiscal", 0, 0, 'C')
         
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 3. FUNÇÕES DE DADOS E APOIO ---
+# --- 3. FUNÇÕES DE DADOS ---
 @st.cache_data(ttl=600)
 def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
@@ -139,7 +134,7 @@ def salvar_dados_desossa(dados_dict):
         df_hist = pd.concat([df_hist, df_novo], ignore_index=True)
     else: df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
-    st.toast("✅ Desossa salva no histórico!", icon='🥩')
+    st.toast("✅ Registro de Desossa salvo!", icon='🥩')
 
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -154,13 +149,14 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- 4. INTERFACE PRINCIPAL ---
+# --- 4. INTERFACE STREAMLIT ---
 st.title("Sistema de Inteligência de Estoque e Desossa")
-st.markdown("*Responsável: **Paulo Henrique**, Setor Fiscal*")
+st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
 
 df_estoque = carregar_dados()
 
 if df_estoque is not None:
+    # Métricas de Topo
     c1, c2, c3 = st.columns(3)
     c1.metric("Estoque Total (Kg)", f"{formatar_br(df_estoque['QTESTGER'].sum())} Kg")
     c2.metric("Valor Imobilizado", f"R$ {formatar_br(df_estoque['Valor em Estoque'].sum())}")
@@ -180,11 +176,13 @@ if df_estoque is not None:
         df_sim = pd.DataFrame(dados_rend)
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
+        # TOTAL NO SIMULADOR RESTAURADO
+        st.info(f"**Total Geral Estimado de Saída: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
     with tab_lancto:
         with st.form("form_desossa", clear_on_submit=True):
             f1, f2, f3, f4, f5, f6 = st.columns(6)
-            res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"]), "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total", 0.0)}
+            res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"]), "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total Entrada", 0.0)}
             cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
             c_form = st.columns(2)
             for i, corte in enumerate(cortes_lista):
@@ -198,12 +196,11 @@ if df_estoque is not None:
             df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
             df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
             
-            st.markdown("#### 🔍 Filtros de Consulta")
             cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
             with cf1: periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()])
             with cf2: sel_nf = st.selectbox("Filtrar NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
             with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-            with cf4: sel_tipo = st.selectbox("Tipo:", ["Todos", "Boi", "Vaca"])
+            with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
             
             df_f = df_h.copy()
             if len(periodo) == 2: df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
@@ -214,18 +211,10 @@ if df_estoque is not None:
             st.dataframe(df_f, use_container_width=True, hide_index=True)
 
             if not df_f.empty:
-                st.download_button("📄 Baixar Relatórios Técnicos (PDF)", gerar_pdf_tecnico(df_f), f"Desossa_Seridoense_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
-                
-                if st.checkbox("📑 Visualizar Distribuição (Gráficos na tela)"):
-                    for _, row in df_f.iterrows():
-                        with st.container(border=True):
-                            st.write(f"**NF: {row['NF']} | {row['FORNECEDOR']}**")
-                            ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
-                            cortes_enc = {c: float(row[c]) for c in row.index if c not in ignorar and float(row[c]) > 0}
-                            st.plotly_chart(px.pie(pd.DataFrame(list(cortes_enc.items()), columns=['C','P']), values='P', names='C', hole=0.4), use_container_width=True)
+                st.download_button("📄 Baixar Relatórios em PDF", gerar_pdf_tecnico(df_f), f"Desossa_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
         else: st.info("Nenhum histórico encontrado.")
 
-    # --- SEÇÃO FIXA: ESTOQUE E VENDAS ---
+    # --- ANÁLISE DE ESTOQUE E VENDAS ---
     st.markdown("---")
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     st.plotly_chart(px.bar(df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER'), x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f').update_layout(height=700), use_container_width=True)
@@ -233,7 +222,7 @@ if df_estoque is not None:
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     cv1, cv2 = st.columns([4, 1])
-    with cv2: v_modo = st.radio("Modo de Visão:", ["Mês Atual", "Comparativo"])
+    with cv2: v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
     with cv1:
         if v_modo == "Mês Atual":
             st.plotly_chart(px.bar(df_estoque.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f'), use_container_width=True)
@@ -243,8 +232,16 @@ if df_estoque is not None:
                 fig_v.add_trace(go.Bar(name=meses[i], y=df_estoque.nlargest(10, 'QTVENDMES')['Descrição'], x=df_estoque.nlargest(10, 'QTVENDMES')[c_v], orientation='h'))
             st.plotly_chart(fig_v.update_layout(barmode='group', height=500), use_container_width=True)
 
+    # --- TABELA DE DETALHAMENTO COM COLUNAS RESTAURADAS ---
     st.markdown("---")
     st.subheader("📋 Detalhamento Geral de Itens")
-    st.dataframe(df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], use_container_width=True, hide_index=True)
-
-    st.info("Dashboard Seridoense - Desenvolvido por Paulo Henrique (Setor Fiscal)")
+    st.dataframe(
+        df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
+        use_container_width=True, hide_index=True,
+        column_config={
+            "QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
+            "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
+            "CUSTOREAL": st.column_config.NumberColumn("Custo Real", format="R$ %.2f"),
+            "Valor em Estoque": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
+        }
+    )
