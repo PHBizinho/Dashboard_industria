@@ -118,7 +118,7 @@ if df_estoque is not None:
             st.markdown("#### 🔍 Filtros de Busca")
             cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
             with cf1: 
-                periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()])
+                periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_data")
             with cf2: 
                 sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
             with cf3: 
@@ -126,8 +126,9 @@ if df_estoque is not None:
             with cf4: 
                 sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
             
+            # --- FILTRAGEM DINÂMICA (CORREÇÃO DE ATUALIZAÇÃO) ---
             df_f = df_h.copy()
-            if isinstance(periodo, list) and len(periodo) == 2:
+            if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
                 df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
             
             if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
@@ -136,17 +137,14 @@ if df_estoque is not None:
             
             st.dataframe(df_f, use_container_width=True, hide_index=True)
 
-            # --- AJUSTE SOLICITADO: OCULTAR/MOSTRAR RELATÓRIO ---
             if not df_f.empty:
                 st.markdown("---")
                 show_report = st.checkbox("📑 Visualizar Fichas de Relatório para Exportação (Gráficos e Tabelas)")
                 
                 if show_report:
                     st.subheader("📄 Relatório Detalhado")
-                    st.caption("Pressione Ctrl + P para salvar a visão abaixo em PDF")
                     for _, row in df_f.iterrows():
                         with st.container(border=True):
-                            # Cabeçalho do Relatório
                             c1, c2 = st.columns([1, 4])
                             with c1: 
                                 if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
@@ -155,29 +153,33 @@ if df_estoque is not None:
                                 st.write(f"Fornecedor: {row['FORNECEDOR']} | Data: {row['DATA']} | Tipo: {row['TIPO']}")
                             
                             st.write(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
-                            
-                            # Dados dos Cortes
                             ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
                             cortes_encontrados = {c: float(row[c]) for c in row.index if c not in ignorar and float(row[c]) > 0}
                             df_rel_corte = pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)'])
                             
-                            # Layout com Tabela e Gráfico Lado a Lado
                             col_tab, col_graph = st.columns([1, 1])
-                            with col_tab:
-                                st.table(df_rel_corte)
+                            with col_tab: st.table(df_rel_corte)
                             with col_graph:
-                                # Gráfico de Pizza para o relatório
-                                fig_pizza = px.pie(df_rel_corte, values='Peso (Kg)', names='Corte', 
-                                                 title=f"Distribuição de Rendimento NF {row['NF']}",
-                                                 hole=0.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-                                fig_pizza.update_layout(showlegend=False) # Oculta legenda para caber melhor na ficha
-                                fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
+                                fig_pizza = px.pie(df_rel_corte, values='Peso (Kg)', names='Corte', title=f"Distribuição NF {row['NF']}", hole=0.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+                                fig_pizza.update_layout(showlegend=False); fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
                                 st.plotly_chart(fig_pizza, use_container_width=True)
         else:
             st.info("Ainda não há registros.")
 
-    # --- ANÁLISE DE VENDAS E ESTOQUE ---
     st.markdown("---")
+    
+    # --- TROCA DE POSIÇÃO SOLICITADA: ESTOQUE PRIMEIRO, VENDAS DEPOIS ---
+    
+    # 1. Gráfico de ESTOQUE
+    st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
+    df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
+    fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
+    fig_est.update_layout(height=800) 
+    st.plotly_chart(fig_est, use_container_width=True)
+
+    st.markdown("---")
+
+    # 2. Gráfico de VENDAS
     st.subheader("🏆 Análise de Vendas (KG)")
     col_v1, col_v2 = st.columns([4, 1])
     with col_v2:
@@ -197,12 +199,9 @@ if df_estoque is not None:
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
-    st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
-    df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
-    fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
-    fig_est.update_layout(height=800) 
-    st.plotly_chart(fig_est, use_container_width=True)
+    st.markdown("---")
 
+    # 3. Tabela de Detalhamento
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(
         df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
