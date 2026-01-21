@@ -126,9 +126,7 @@ if df_estoque is not None:
             with cf4: 
                 sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
             
-            # --- CORREÇÃO DO FILTRO ---
             df_f = df_h.copy()
-            # Se o período tiver as duas datas, filtra. Se tiver só uma (incompleto), não dá erro.
             if isinstance(periodo, list) and len(periodo) == 2:
                 df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
             
@@ -138,25 +136,47 @@ if df_estoque is not None:
             
             st.dataframe(df_f, use_container_width=True, hide_index=True)
 
+            # --- AJUSTE SOLICITADO: OCULTAR/MOSTRAR RELATÓRIO ---
             if not df_f.empty:
                 st.markdown("---")
-                st.subheader("📄 Relatório para Impressão")
-                for _, row in df_f.iterrows():
-                    with st.container(border=True):
-                        c1, c2 = st.columns([1, 4])
-                        with c1: 
-                            if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
-                        with c2:
-                            st.markdown(f"**NF: {row['NF']}** | Fornecedor: {row['FORNECEDOR']} | Data: {row['DATA']}")
-                            st.write(f"Entrada: {row['ENTRADA']} Kg | Peças: {row['PECAS']}")
-                        
-                        ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
-                        cortes_encontrados = {c: row[c] for c in row.index if c not in ignorar and float(row[c]) > 0}
-                        st.table(pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)']))
+                show_report = st.checkbox("📑 Visualizar Fichas de Relatório para Exportação (Gráficos e Tabelas)")
+                
+                if show_report:
+                    st.subheader("📄 Relatório Detalhado")
+                    st.caption("Pressione Ctrl + P para salvar a visão abaixo em PDF")
+                    for _, row in df_f.iterrows():
+                        with st.container(border=True):
+                            # Cabeçalho do Relatório
+                            c1, c2 = st.columns([1, 4])
+                            with c1: 
+                                if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
+                            with c2:
+                                st.markdown(f"**Relatório de Desossa | NF: {row['NF']}**")
+                                st.write(f"Fornecedor: {row['FORNECEDOR']} | Data: {row['DATA']} | Tipo: {row['TIPO']}")
+                            
+                            st.write(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
+                            
+                            # Dados dos Cortes
+                            ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
+                            cortes_encontrados = {c: float(row[c]) for c in row.index if c not in ignorar and float(row[c]) > 0}
+                            df_rel_corte = pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)'])
+                            
+                            # Layout com Tabela e Gráfico Lado a Lado
+                            col_tab, col_graph = st.columns([1, 1])
+                            with col_tab:
+                                st.table(df_rel_corte)
+                            with col_graph:
+                                # Gráfico de Pizza para o relatório
+                                fig_pizza = px.pie(df_rel_corte, values='Peso (Kg)', names='Corte', 
+                                                 title=f"Distribuição de Rendimento NF {row['NF']}",
+                                                 hole=0.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+                                fig_pizza.update_layout(showlegend=False) # Oculta legenda para caber melhor na ficha
+                                fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
+                                st.plotly_chart(fig_pizza, use_container_width=True)
         else:
             st.info("Ainda não há registros.")
 
-    # --- ANÁLISE DE VENDAS E ESTOQUE (LAYOUT ORIGINAL RESTAURADO) ---
+    # --- ANÁLISE DE VENDAS E ESTOQUE ---
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     col_v1, col_v2 = st.columns([4, 1])
