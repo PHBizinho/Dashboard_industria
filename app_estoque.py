@@ -9,21 +9,32 @@ import os
 # --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO DE IMPRESSÃO ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
-# CSS para esconder elementos do Streamlit na hora da impressão (Ctrl + P)
+# CSS Ajustado para garantir que apenas o relatório apareça no Ctrl+P
 st.markdown("""
     <style>
     @media print {
+        /* Esconde elementos de interface e navegação */
         header, [data-testid="stSidebar"], [data-testid="stHeader"], 
         .stActionButton, [data-testid="stWidgetLabel"], 
-        button, .stCheckbox, hr {
+        button, .stCheckbox, hr, .stTabs, [data-testid="stMetric"] {
             display: none !important;
         }
-        .main {
-            padding-top: 0 !important;
+        
+        /* Remove paddings que empurram o conteúdo para baixo */
+        .main .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 0 !important;
         }
-        [data-testid="stMetric"] {
-            border: 1px solid #ddd;
-            padding: 10px;
+
+        /* Força a exibição apenas da área do relatório */
+        .print-only {
+            display: block !important;
+        }
+
+        /* Estilização para tabelas no papel */
+        table {
+            font-size: 12px !important;
+            width: 100% !important;
         }
     }
     </style>
@@ -137,16 +148,11 @@ if df_estoque is not None:
             
             st.markdown("#### 🔍 Filtros de Busca")
             cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
-            with cf1: 
-                periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_data")
-            with cf2: 
-                sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
-            with cf3: 
-                sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-            with cf4: 
-                sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+            with cf1: periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_data")
+            with cf2: sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
+            with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
+            with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
             
-            # --- FILTRAGEM DINÂMICA ---
             df_f = df_h.copy()
             if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
                 df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
@@ -159,38 +165,36 @@ if df_estoque is not None:
 
             if not df_f.empty:
                 st.markdown("---")
-                show_report = st.checkbox("📑 Visualizar Fichas de Relatório para Exportação (Gráficos e Tabelas)")
+                show_report = st.checkbox("📑 Visualizar Relatórios para Impressão (Ctrl + P)")
                 
                 if show_report:
+                    st.info("💡 Dica: Após marcar esta caixa, pressione **Ctrl + P** no teclado e escolha 'Salvar como PDF'.")
                     st.subheader("📄 Relatório Detalhado")
+                    
                     for _, row in df_f.iterrows():
+                        # Marcamos o início da área de impressão
                         with st.container(border=True):
                             c1, c2 = st.columns([1, 4])
                             with c1: 
                                 if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
                             with c2:
-                                st.markdown(f"**Relatório de Desossa | NF: {row['NF']}**")
+                                st.markdown(f"### Relatório de Desossa | NF: {row['NF']}")
                                 st.write(f"Fornecedor: {row['FORNECEDOR']} | Data: {row['DATA']} | Tipo: {row['TIPO']}")
                             
                             st.write(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
+                            
                             ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
                             cortes_encontrados = {c: float(row[c]) for c in row.index if c not in ignorar and float(row[c]) > 0}
                             df_rel_corte = pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)'])
                             
-                            col_tab, col_graph = st.columns([1, 1])
-                            with col_tab: st.table(df_rel_corte)
-                            with col_graph:
-                                fig_pizza = px.pie(df_rel_corte, values='Peso (Kg)', names='Corte', title=f"Distribuição NF {row['NF']}", hole=0.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-                                fig_pizza.update_layout(showlegend=False); fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
-                                st.plotly_chart(fig_pizza, use_container_width=True)
-        else:
-            st.info("Ainda não há registros.")
+                            # Usamos st.table para impressão porque não tem barra de rolagem
+                            st.table(df_rel_corte)
+                            st.write(f"---")
+                            st.write(f"*Relatório desenvolvido por Paulo Henrique - Setor Fiscal*")
 
     st.markdown("---")
     
-    # --- POSIÇÃO AJUSTADA: ESTOQUE EM CIMA, VENDAS EM BAIXO ---
-    
-    # 1. Gráfico de ESTOQUE
+    # --- GRÁFICOS ABAIXO (Escondidos na impressão pelo CSS) ---
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
@@ -198,9 +202,8 @@ if df_estoque is not None:
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
-
-    # 2. Gráfico de VENDAS
     st.subheader("🏆 Análise de Vendas (KG)")
+    # (Resto da lógica de vendas idêntica...)
     col_v1, col_v2 = st.columns([4, 1])
     with col_v2:
         modo = st.radio("Visão de Vendas:", ["Mês Atual", "Comparativo"])
@@ -220,8 +223,6 @@ if df_estoque is not None:
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
-
-    # 3. Tabela de Detalhamento
     st.subheader("📋 Detalhamento Geral")
     st.dataframe(
         df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
