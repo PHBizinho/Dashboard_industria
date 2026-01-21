@@ -9,6 +9,7 @@ import os
 # --- 1. CONFIGURAÇÃO AMBIENTE ---
 if 'oracle_client_initialized' not in st.session_state:
     try:
+        # Ajuste o caminho conforme seu ambiente
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
         st.session_state['oracle_client_initialized'] = True
     except Exception as e:
@@ -32,6 +33,7 @@ def carregar_dados():
         df_final['Valor em Estoque'] = df_final['QTESTGER'] * df_final['CUSTOREAL']
         return df_final
     except Exception as e:
+        st.error(f"Erro ao carregar Banco Oracle: {e}")
         return None
 
 def salvar_dados_desossa(dados_dict):
@@ -46,7 +48,7 @@ def salvar_dados_desossa(dados_dict):
     else:
         df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
-    st.toast(f"✅ Desossa salva!", icon='🥩')
+    st.toast(f"✅ Desossa salva com sucesso!", icon='🥩')
 
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -65,9 +67,11 @@ def obter_nomes_meses():
 # --- 3. INTERFACE ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
+# Cabeçalho
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
-    if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=140)
+    if os.path.exists("MARCA-SERIDOENSE_.png"): 
+        st.image("MARCA-SERIDOENSE_.png", width=140)
 with col_tit:
     st.title("Sistema de Inteligência de Estoque e Desossa")
     st.markdown("*Responsável: **Paulo Henrique**, Setor Fiscal*")
@@ -75,6 +79,7 @@ with col_tit:
 df_estoque = carregar_dados()
 
 if df_estoque is not None:
+    # KPIs Superiores
     c1, c2, c3 = st.columns(3)
     c1.metric("Estoque Total (Kg)", f"{formatar_br(df_estoque['QTESTGER'].sum())} Kg")
     c2.metric("Valor Imobilizado", f"R$ {formatar_br(df_estoque['Valor em Estoque'].sum())}")
@@ -85,14 +90,14 @@ if df_estoque is not None:
         "📊 Gráfico de Rendimento", "🧮 Simulador de Carga", "📝 Registro Real Diário", "🔍 Histórico e Consulta"
     ])
 
-    # --- TAB RENDIMENTO ---
+    # --- TAB 1: RENDIMENTO ---
     with tab_rend:
         dados_rend = {"Corte": ["OSSO BOV KG PROD", "COXAO MOLE BOV KG PROD", "CONTRAFILE BOV KG PROD", "COXAO DURO BOV KG PROD", "CARNE BOV PROD (LIMPEZA)", "PATINHO BOV KG PROD", "MUSCULO TRASEIRO BOV KG PROD", "CORACAO ALCATRA BOV KG PROD", "CAPA CONTRA FILE BOV KG PROD", "LOMBO PAULISTA BOV KG PROD", "OSSO BOV SERRA KG PROD", "FRALDA BOV KG PROD", "FILE MIGNON BOV PROD PÇ±1.6 KG", "MAMINHA BOV KG PROD", "PICANHA BOV KG PROD", "COSTELINHA CONTRA FILE KG PROD", "SEBO BOV KG PROD", "OSSO PATINHO BOV KG PROD", "ARANHA BOV KG PROD", "FILEZINHO MOCOTO KG PROD"], "Rendimento (%)": [14.56, 13.4, 10.75, 9.32, 8.04, 7.88, 6.68, 5.42, 3.64, 3.60, 3.07, 2.65, 2.37, 2.27, 1.71, 1.69, 1.38, 0.76, 0.63, 0.18]}
         df_rend = pd.DataFrame(dados_rend)
         fig_r = px.bar(df_rend.sort_values("Rendimento (%)", ascending=True), x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f')
         st.plotly_chart(fig_r, use_container_width=True)
 
-    # --- TAB SIMULADOR ---
+    # --- TAB 2: SIMULADOR ---
     with tab_sim:
         p_entrada = st.number_input("Peso para simular (Kg):", min_value=0.0, value=25000.0)
         df_sim = df_rend.copy()
@@ -100,79 +105,92 @@ if df_estoque is not None:
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
         st.info(f"**Total Geral Estimado: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
-    # --- TAB LANÇAMENTO ---
+    # --- TAB 3: LANÇAMENTO ---
     with tab_lancto:
         with st.form("form_desossa", clear_on_submit=True):
             f1, f2, f3, f4, f5, f6 = st.columns(6)
             f_data = f1.date_input("Data", datetime.now()); f_nf = f2.text_input("Nº NF")
             f_tipo = f3.selectbox("Tipo", ["Boi", "Vaca"]); f_forn = f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"])
             f_pecas = f5.number_input("Qtd Peças", min_value=0); f_peso = f6.number_input("Peso Total", min_value=0.0)
+            
             cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
             res_val = {"DATA": f_data, "NF": f_nf, "TIPO": f_tipo, "FORNECEDOR": f_forn, "PECAS": f_pecas, "ENTRADA": f_peso}
+            
             c_form = st.columns(2)
             for i, corte in enumerate(cortes_lista):
-                with (c_form[0] if i % 2 == 0 else c_form[1]): res_val[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"inp_{corte}")
+                with (c_form[0] if i % 2 == 0 else c_form[1]): 
+                    res_val[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"inp_{corte}")
+            
             if st.form_submit_button("💾 Salvar Registro Diário"):
-                if f_peso > 0 and f_nf: salvar_dados_desossa(res_val); st.rerun()
-                else: st.error("Preencha NF e Peso.")
+                if f_peso > 0 and f_nf: 
+                    salvar_dados_desossa(res_val)
+                    st.rerun()
+                else: 
+                    st.error("Preencha o Número da NF e o Peso Total.")
 
-    # --- TAB CONSULTA (COM CORREÇÃO DE ERRO) ---
+    # --- TAB 4: CONSULTA E RELATÓRIO ---
     with tab_consulta:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
             try:
                 df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
-                if df_h.empty:
-                    st.warning("O arquivo de histórico está vazio.")
-                else:
-                    df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
-                    st.markdown("#### 🔍 Filtros de Busca")
-                    cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
+                df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
+                
+                st.markdown("#### 🔍 Filtros de Busca")
+                cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
+                
+                with cf1:
+                    hoje_data = datetime.now().date()
+                    periodo = st.date_input("Período:", [hoje_data - timedelta(days=7), hoje_data])
+                with cf2:
+                    sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
+                with cf3:
+                    sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
+                with cf4:
+                    sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+                
+                # Aplicação dos filtros com trava de segurança para o período
+                df_f = df_h.copy()
+                if isinstance(periodo, list) and len(periodo) == 2:
+                    df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
                     
-                    with cf1: 
-                        periodo = st.date_input("Período:", [datetime.now() - timedelta(days=7), datetime.now()])
-                    with cf2: 
-                        sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
-                    with cf3: 
-                        sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-                    with cf4: 
-                        sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+                    if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
+                    if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
+                    if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
                     
-                    # TRAVA DE SEGURANÇA: Só filtra se o usuário selecionou as duas datas (Início e Fim)
-                    if isinstance(periodo, list) and len(periodo) == 2:
-                        mask = (df_h['DATA'] >= periodo[0]) & (df_h['DATA'] <= periodo[1])
-                        df_f = df_h.loc[mask]
+                    if not df_f.empty:
+                        st.dataframe(df_f, use_container_width=True, hide_index=True)
+                        st.markdown("---")
+                        st.subheader("📄 Ficha de Desossa (Formato para Impressão)")
+                        st.caption("Pressione Ctrl + P para salvar como PDF")
                         
-                        if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
-                        if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
-                        if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
-                        
-                        if not df_f.empty:
-                            st.dataframe(df_f, use_container_width=True, hide_index=True)
-                            st.markdown("---")
-                            st.subheader("📄 Relatório para Impressão (Ctrl + P)")
-                            for _, row in df_f.iterrows():
-                                with st.container(border=True):
-                                    c_rel1, c_rel2 = st.columns([1, 4])
-                                    with c_rel1: 
-                                        if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
-                                    with c_rel2:
-                                        st.markdown(f"### Desossa NF: {row['NF']}")
-                                        st.write(f"**Data:** {row['DATA']} | **Fornecedor:** {row['FORNECEDOR']} | **Tipo:** {row['TIPO']}")
-                                    
-                                    st.write(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
-                                    ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
-                                    cortes_encontrados = {c: row[c] for c in row.index if c not in ignorar and float(row[c]) > 0}
-                                    st.table(pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)']))
-                        else:
-                            st.info("Nenhum registro encontrado para este período/filtro.")
+                        for _, row in df_f.iterrows():
+                            with st.container(border=True):
+                                c_rel1, c_rel2 = st.columns([1, 4])
+                                with c_rel1:
+                                    if os.path.exists("MARCA-SERIDOENSE_.png"): 
+                                        st.image("MARCA-SERIDOENSE_.png", width=120)
+                                with c_rel2:
+                                    st.markdown(f"### Relatório de Desossa - NF: {row['NF']}")
+                                    st.markdown(f"**Data:** {row['DATA']} | **Fornecedor:** {row['FORNECEDOR']} | **Tipo:** {row['TIPO']}")
+                                
+                                st.markdown(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
+                                
+                                # Filtrar apenas cortes com peso > 0
+                                ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
+                                cortes_exibir = {c: row[c] for c in row.index if c not in ignorar and float(row[c]) > 0}
+                                
+                                df_tabela = pd.DataFrame(list(cortes_exibir.items()), columns=['Item / Corte', 'Peso (Kg)'])
+                                st.table(df_tabela)
                     else:
-                        st.warning("Por favor, selecione a data de início e a data de fim no calendário.")
+                        st.info("Nenhum registro encontrado para este filtro.")
+                else:
+                    st.warning("Selecione o período completo (Início e Fim) no calendário.")
             except Exception as e:
-                st.error(f"Erro ao carregar histórico: {e}")
+                st.error(f"Erro ao processar histórico: {e}")
         else:
-            st.info("Ainda não há registros de desossa salvos.")
+            st.info("Ainda não há registros no histórico.")
 
-    # --- GRÁFICOS DE VENDAS E ESTOQUE (PERMANECEM IGUAIS) ---
+    # --- 4. ANÁLISE DE VENDAS (RODAPÉ) ---
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     col_v1, col_v2 = st.columns([4, 1])
@@ -194,16 +212,19 @@ if df_estoque is not None:
             fig_v.update_layout(barmode='group', height=500)
         st.plotly_chart(fig_v, use_container_width=True)
 
+    # Gráfico de Estoque
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
     fig_est.update_layout(height=800) 
     st.plotly_chart(fig_est, use_container_width=True)
 
-    st.subheader("📋 Detalhamento Geral")
+    # Tabela Detalhada Final
+    st.subheader("📋 Detalhamento Geral de Estoque")
     st.dataframe(
         df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
-        use_container_width=True, hide_index=True,
+        use_container_width=True, 
+        hide_index=True,
         column_config={
             "QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
             "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
