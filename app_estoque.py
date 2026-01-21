@@ -10,7 +10,6 @@ from fpdf import FPDF
 # --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
-# CSS para limpeza de interface
 st.markdown("""
     <style>
     @media print {
@@ -30,7 +29,7 @@ if 'oracle_client_initialized' not in st.session_state:
     except Exception as e:
         st.error(f"Erro Client Oracle: {e}")
 
-# --- 2. FUNÇÃO GERADORA DE PDF (VERSÃO LIMPA SEM LOGO) ---
+# --- 2. FUNÇÃO GERADORA DE PDF (VERSÃO SEM LOGO) ---
 def gerar_pdf_tecnico(df_filtrado):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -38,14 +37,12 @@ def gerar_pdf_tecnico(df_filtrado):
     for _, row in df_filtrado.iterrows():
         pdf.add_page()
         
-        # Título Centralizado
         pdf.set_y(15)
         pdf.set_font("Arial", 'B', 16)
         pdf.set_text_color(204, 0, 0) 
         pdf.cell(190, 10, "RELATORIO TECNICO DE DESOSSA", 0, 1, 'C')
         pdf.ln(10) 
         
-        # Cabeçalho de Dados da Carga
         pdf.set_font("Arial", 'B', 9)
         pdf.set_fill_color(235, 235, 235)
         pdf.set_text_color(0, 0, 0)
@@ -66,7 +63,6 @@ def gerar_pdf_tecnico(df_filtrado):
         pdf.cell(65, 7, str(row['PECAS']), 1, 1, 'L')
         pdf.ln(5)
         
-        # Tabela de Cortes
         pdf.set_font("Arial", 'B', 10)
         pdf.set_fill_color(204, 0, 0)
         pdf.set_text_color(255, 255, 255)
@@ -88,7 +84,6 @@ def gerar_pdf_tecnico(df_filtrado):
                         total_saida += valor
                 except: continue
         
-        # Resumo de Rendimento
         pdf.ln(2)
         pdf.set_font("Arial", 'B', 10)
         pdf.cell(130, 8, "TOTAL PRODUZIDO", 0, 0, 'R')
@@ -98,7 +93,6 @@ def gerar_pdf_tecnico(df_filtrado):
         pdf.cell(130, 8, "RENDIMENTO (%)", 0, 0, 'R')
         pdf.cell(60, 8, f"{rendimento:.2f} %", 1, 1, 'R', True)
         
-        # Rodapé Técnico
         pdf.set_y(-25)
         pdf.set_font("Arial", 'I', 8)
         pdf.set_text_color(100, 100, 100)
@@ -109,7 +103,7 @@ def gerar_pdf_tecnico(df_filtrado):
         
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 3. FUNÇÕES DE DADOS ---
+# --- 3. FUNÇÕES DE APOIO ---
 @st.cache_data(ttl=600)
 def carregar_dados():
     conn_params = {"user": "NUTRICAO", "password": "nutr1125mmf", "dsn": "192.168.222.20:1521/WINT"}
@@ -134,7 +128,7 @@ def salvar_dados_desossa(dados_dict):
         df_hist = pd.concat([df_hist, df_novo], ignore_index=True)
     else: df_hist = df_novo
     df_hist.to_csv(arquivo, index=False)
-    st.toast("✅ Registro de Desossa salvo!", icon='🥩')
+    st.toast("✅ Desossa salva!", icon='🥩')
 
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -149,14 +143,13 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- 4. INTERFACE STREAMLIT ---
+# --- 4. INTERFACE ---
 st.title("Sistema de Inteligência de Estoque e Desossa")
 st.markdown("*Desenvolvido por: **Paulo Henrique**, Setor Fiscal*")
 
 df_estoque = carregar_dados()
 
 if df_estoque is not None:
-    # Métricas de Topo
     c1, c2, c3 = st.columns(3)
     c1.metric("Estoque Total (Kg)", f"{formatar_br(df_estoque['QTESTGER'].sum())} Kg")
     c2.metric("Valor Imobilizado", f"R$ {formatar_br(df_estoque['Valor em Estoque'].sum())}")
@@ -176,8 +169,7 @@ if df_estoque is not None:
         df_sim = pd.DataFrame(dados_rend)
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
-        # TOTAL NO SIMULADOR RESTAURADO
-        st.info(f"**Total Geral Estimado de Saída: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
+        st.info(f"**Total Geral Estimado: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
     with tab_lancto:
         with st.form("form_desossa", clear_on_submit=True):
@@ -222,17 +214,27 @@ if df_estoque is not None:
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     cv1, cv2 = st.columns([4, 1])
-    with cv2: v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
+    
+    # FILTRO DE CORTES RESTAURADO AQUI
+    with cv2: 
+        v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
+        filtro_vendas = st.multiselect("Pesquisar Cortes:", sorted(df_estoque['Descrição'].unique()))
+    
+    df_vendas_final = df_estoque.copy()
+    if filtro_vendas:
+        df_vendas_final = df_vendas_final[df_vendas_final['Descrição'].isin(filtro_vendas)]
+    
     with cv1:
         if v_modo == "Mês Atual":
-            st.plotly_chart(px.bar(df_estoque.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f'), use_container_width=True)
+            st.plotly_chart(px.bar(df_vendas_final.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f'), use_container_width=True)
         else:
             fig_v = go.Figure(); meses = obter_nomes_meses()
+            top_10 = df_vendas_final.nlargest(10, 'QTVENDMES')
             for i, c_v in enumerate(['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']):
-                fig_v.add_trace(go.Bar(name=meses[i], y=df_estoque.nlargest(10, 'QTVENDMES')['Descrição'], x=df_estoque.nlargest(10, 'QTVENDMES')[c_v], orientation='h'))
+                fig_v.add_trace(go.Bar(name=meses[i], y=top_10['Descrição'], x=top_10[c_v], orientation='h'))
             st.plotly_chart(fig_v.update_layout(barmode='group', height=500), use_container_width=True)
 
-    # --- TABELA DE DETALHAMENTO COM COLUNAS RESTAURADAS ---
+    # --- TABELA DE DETALHAMENTO ---
     st.markdown("---")
     st.subheader("📋 Detalhamento Geral de Itens")
     st.dataframe(
