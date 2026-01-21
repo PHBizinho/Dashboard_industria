@@ -29,51 +29,42 @@ if 'oracle_client_initialized' not in st.session_state:
     except Exception as e:
         st.error(f"Erro Client Oracle: {e}")
 
-# --- 2. FUNÇÃO GERADORA DE PDF (MANTIDA SEM LOGO PARA ENQUADRAMENTO) ---
+# --- 2. FUNÇÃO GERADORA DE PDF ---
 def gerar_pdf_tecnico(df_filtrado):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    
     for _, row in df_filtrado.iterrows():
         pdf.add_page()
-        
         pdf.set_y(15)
         pdf.set_font("Arial", 'B', 16)
         pdf.set_text_color(204, 0, 0) 
         pdf.cell(190, 10, "RELATORIO TECNICO DE DESOSSA", 0, 1, 'C')
         pdf.ln(10) 
-        
         pdf.set_font("Arial", 'B', 9)
         pdf.set_fill_color(235, 235, 235)
         pdf.set_text_color(0, 0, 0)
-        
         pdf.cell(30, 7, "NF:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['NF']), 1, 0, 'L')
         pdf.cell(30, 7, "DATA:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['DATA']), 1, 1, 'L')
-        
         pdf.cell(30, 7, "FORNECEDOR:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['FORNECEDOR']), 1, 0, 'L')
         pdf.cell(30, 7, "TIPO:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['TIPO']), 1, 1, 'L')
-        
         pdf.cell(30, 7, "ENTRADA (Kg):", 1, 0, 'L', True)
         pdf.cell(65, 7, f"{float(row['ENTRADA']):.2f}", 1, 0, 'L')
         pdf.cell(30, 7, "PECAS:", 1, 0, 'L', True)
         pdf.cell(65, 7, str(row['PECAS']), 1, 1, 'L')
         pdf.ln(5)
-        
         pdf.set_font("Arial", 'B', 10)
         pdf.set_fill_color(204, 0, 0)
         pdf.set_text_color(255, 255, 255)
         pdf.cell(130, 8, " CORTE", 1, 0, 'L', True)
         pdf.cell(60, 8, "PESO LIQUIDO (Kg) ", 1, 1, 'R', True)
-        
         pdf.set_font("Arial", '', 9)
         pdf.set_text_color(0, 0, 0)
         ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
         total_saida = 0
-        
         for c in row.index:
             if c not in ignorar:
                 try:
@@ -83,16 +74,13 @@ def gerar_pdf_tecnico(df_filtrado):
                         pdf.cell(60, 6, f"{valor:.2f}  ", 1, 1, 'R')
                         total_saida += valor
                 except: continue
-        
         pdf.ln(2)
         pdf.set_font("Arial", 'B', 10)
         pdf.cell(130, 8, "TOTAL PRODUZIDO", 0, 0, 'R')
         pdf.cell(60, 8, f"{total_saida:.2f} Kg", 1, 1, 'R', True)
-        
         rendimento = (total_saida / float(row['ENTRADA'])) * 100 if float(row['ENTRADA']) > 0 else 0
         pdf.cell(130, 8, "RENDIMENTO (%)", 0, 0, 'R')
         pdf.cell(60, 8, f"{rendimento:.2f} %", 1, 1, 'R', True)
-        
         pdf.set_y(-25)
         pdf.set_font("Arial", 'I', 8)
         pdf.set_text_color(100, 100, 100)
@@ -100,7 +88,6 @@ def gerar_pdf_tecnico(df_filtrado):
         pdf.cell(190, 5, f"Relatorio gerado em: {agora}", 0, 1, 'C')
         pdf.set_font("Arial", 'B', 8)
         pdf.cell(190, 5, "Desenvolvido por: Paulo Henrique - Setor Fiscal", 0, 0, 'C')
-        
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 3. FUNÇÕES DE APOIO ---
@@ -144,7 +131,6 @@ def obter_nomes_meses():
     return lista
 
 # --- 4. INTERFACE ---
-# TOPO COM LOGO E TÍTULO LADO A LADO
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
     if os.path.exists("MARCA-SERIDOENSE_.png"):
@@ -178,41 +164,48 @@ if df_estoque is not None:
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
         st.info(f"**Total Geral Estimado: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
+    # --- ABA DE LANÇAMENTO COM TRAVA DE SENHA ---
     with tab_lancto:
-        with st.form("form_desossa", clear_on_submit=True):
-            f1, f2, f3, f4, f5, f6 = st.columns(6)
-            res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"]), "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total Entrada", 0.0)}
-            cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
-            c_form = st.columns(2)
-            for i, corte in enumerate(cortes_lista):
-                with (c_form[0] if i % 2 == 0 else c_form[1]): res_val[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"inp_{corte}")
-            if st.form_submit_button("💾 Salvar Registro Diário"):
-                if res_val["ENTRADA"] > 0 and res_val["NF"]: salvar_dados_desossa(res_val); st.rerun()
-                else: st.error("Erro: NF e Peso de Entrada são obrigatórios.")
+        st.subheader("Acesso Restrito")
+        senha_acesso = st.text_input("Digite a senha para liberar o registro:", type="password")
+        
+        # --- ALTERE A SENHA ABAIXO ---
+        if senha_acesso == "serido123": 
+            with st.form("form_desossa", clear_on_submit=True):
+                f1, f2, f3, f4, f5, f6 = st.columns(6)
+                res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "OUTROS"]), "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total Entrada", 0.0)}
+                cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
+                c_form = st.columns(2)
+                for i, corte in enumerate(cortes_lista):
+                    with (c_form[0] if i % 2 == 0 else c_form[1]): res_val[corte] = st.number_input(f"{corte}", min_value=0.0, key=f"inp_{corte}")
+                if st.form_submit_button("💾 Salvar Registro Diário"):
+                    if res_val["ENTRADA"] > 0 and res_val["NF"]: salvar_dados_desossa(res_val); st.rerun()
+                    else: st.error("Erro: NF e Peso de Entrada são obrigatórios.")
+        elif senha_acesso != "":
+            st.error("Senha incorreta. Acesso negado.")
+        else:
+            st.warning("Aguardando senha para liberar formulário.")
 
     with tab_consulta:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
             df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
             df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
-            
             cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
             with cf1: periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()])
             with cf2: sel_nf = st.selectbox("Filtrar NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
             with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
             with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
-            
             df_f = df_h.copy()
             if len(periodo) == 2: df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
             if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
             if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
             if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
-            
             st.dataframe(df_f, use_container_width=True, hide_index=True)
-
             if not df_f.empty:
                 st.download_button("📄 Baixar Relatórios em PDF", gerar_pdf_tecnico(df_f), f"Desossa_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
         else: st.info("Nenhum histórico encontrado.")
 
+    # --- ANÁLISE DE ESTOQUE E VENDAS ---
     st.markdown("---")
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     st.plotly_chart(px.bar(df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER'), x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f').update_layout(height=700), use_container_width=True)
@@ -220,15 +213,11 @@ if df_estoque is not None:
     st.markdown("---")
     st.subheader("🏆 Análise de Vendas (KG)")
     cv1, cv2 = st.columns([4, 1])
-    
     with cv2: 
         v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
         filtro_vendas = st.multiselect("Pesquisar Cortes:", sorted(df_estoque['Descrição'].unique()))
-    
     df_vendas_final = df_estoque.copy()
-    if filtro_vendas:
-        df_vendas_final = df_vendas_final[df_vendas_final['Descrição'].isin(filtro_vendas)]
-    
+    if filtro_vendas: df_vendas_final = df_vendas_final[df_vendas_final['Descrição'].isin(filtro_vendas)]
     with cv1:
         if v_modo == "Mês Atual":
             st.plotly_chart(px.bar(df_vendas_final.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f'), use_container_width=True)
