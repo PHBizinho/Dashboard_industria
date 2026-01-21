@@ -9,21 +9,33 @@ import os
 # --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO DE IMPRESSÃO ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
-# CSS para esconder elementos do Streamlit na hora da impressão (Ctrl + P)
+# CSS AVANÇADO: Quando imprimir, esconde tudo e mostra apenas a classe 'secao-impressao'
 st.markdown("""
     <style>
     @media print {
+        /* Esconde todos os elementos do Streamlit */
         header, [data-testid="stSidebar"], [data-testid="stHeader"], 
         .stActionButton, [data-testid="stWidgetLabel"], 
-        button, .stCheckbox, hr {
+        button, .stCheckbox, hr, [data-testid="stTabs"], .no-print {
             display: none !important;
         }
-        .main {
-            padding-top: 0 !important;
+        
+        /* Remove o padding padrão do Streamlit para aproveitar a folha */
+        .main .block-container {
+            padding: 0 !important;
         }
-        [data-testid="stMetric"] {
-            border: 1px solid #ddd;
-            padding: 10px;
+
+        /* Força a exibição apenas da área do relatório */
+        .printable-area {
+            display: block !important;
+        }
+        
+        /* Quebra de página entre fichas se houver mais de uma */
+        .ficha-container {
+            page-break-after: always;
+            border: 2px solid #EEE;
+            padding: 20px;
+            margin-bottom: 20px;
         }
     }
     </style>
@@ -92,10 +104,13 @@ with col_tit:
 df_estoque = carregar_dados()
 
 if df_estoque is not None:
+    # Div classe 'no-print' para esconder métricas na impressão
+    st.markdown('<div class="no-print">', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     c1.metric("Estoque Total (Kg)", f"{formatar_br(df_estoque['QTESTGER'].sum())} Kg")
     c2.metric("Valor Imobilizado", f"R$ {formatar_br(df_estoque['Valor em Estoque'].sum())}")
     c3.metric(f"Venda {obter_nomes_meses()[0]}", f"{formatar_br(df_estoque['QTVENDMES'].sum())} Kg")
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("---")
 
     tab_rend, tab_sim, tab_lancto, tab_consulta = st.tabs([
@@ -135,62 +150,65 @@ if df_estoque is not None:
             df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
             df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
             
+            # Encapsula filtros em 'no-print'
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("#### 🔍 Filtros de Busca")
             cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
-            with cf1: 
-                periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_data")
-            with cf2: 
-                sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
-            with cf3: 
-                sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-            with cf4: 
-                sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
-            
-            # --- FILTRAGEM DINÂMICA ---
+            with cf1: periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_data")
+            with cf2: sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
+            with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
+            with cf4: sel_tipo = st.selectbox("Tipo Animal:", ["Todos", "Boi", "Vaca"])
+            st.markdown('</div>', unsafe_allow_html=True)
+
             df_f = df_h.copy()
             if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
                 df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
-            
             if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
             if sel_forn != "Todos": df_f = df_f[df_f['FORNECEDOR'] == sel_forn]
             if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
             
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.dataframe(df_f, use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
             if not df_f.empty:
-                st.markdown("---")
-                show_report = st.checkbox("📑 Visualizar Fichas de Relatório para Exportação (Gráficos e Tabelas)")
+                st.markdown('<div class="no-print">', unsafe_allow_html=True)
+                show_report = st.checkbox("📑 Visualizar Fichas de Relatório para Exportação")
+                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if show_report:
-                    st.subheader("📄 Relatório Detalhado")
+                    # Início da área que será impressa
+                    st.markdown('<div class="printable-area">', unsafe_allow_html=True)
                     for _, row in df_f.iterrows():
-                        with st.container(border=True):
-                            c1, c2 = st.columns([1, 4])
-                            with c1: 
-                                if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
-                            with c2:
-                                st.markdown(f"**Relatório de Desossa | NF: {row['NF']}**")
-                                st.write(f"Fornecedor: {row['FORNECEDOR']} | Data: {row['DATA']} | Tipo: {row['TIPO']}")
-                            
-                            st.write(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
-                            ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
-                            cortes_encontrados = {c: float(row[c]) for c in row.index if c not in ignorar and float(row[c]) > 0}
-                            df_rel_corte = pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)'])
-                            
-                            col_tab, col_graph = st.columns([1, 1])
-                            with col_tab: st.table(df_rel_corte)
-                            with col_graph:
-                                fig_pizza = px.pie(df_rel_corte, values='Peso (Kg)', names='Corte', title=f"Distribuição NF {row['NF']}", hole=0.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-                                fig_pizza.update_layout(showlegend=False); fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
-                                st.plotly_chart(fig_pizza, use_container_width=True)
+                        # Div para cada ficha (quebra página no print)
+                        st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
+                        c1, c2 = st.columns([1, 4])
+                        with c1: 
+                            if os.path.exists("MARCA-SERIDOENSE_.png"): st.image("MARCA-SERIDOENSE_.png", width=120)
+                        with c2:
+                            st.markdown(f"### Relatório de Desossa | NF: {row['NF']}")
+                            st.write(f"**Fornecedor:** {row['FORNECEDOR']} | **Data:** {row['DATA']} | **Tipo:** {row['TIPO']}")
+                        
+                        st.write(f"**Peso Entrada:** {row['ENTRADA']} Kg | **Qtd Peças:** {row['PECAS']}")
+                        
+                        ignorar = ['DATA', 'NF', 'TIPO', 'FORNECEDOR', 'PECAS', 'ENTRADA']
+                        cortes_encontrados = {c: float(row[c]) for c in row.index if c not in ignorar and float(row[c]) > 0}
+                        df_rel_corte = pd.DataFrame(list(cortes_encontrados.items()), columns=['Corte', 'Peso (Kg)'])
+                        
+                        col_tab, col_graph = st.columns([1, 1])
+                        with col_tab: st.table(df_rel_corte)
+                        with col_graph:
+                            fig_pizza = px.pie(df_rel_corte, values='Peso (Kg)', names='Corte', title=f"Distribuição NF {row['NF']}", hole=0.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+                            fig_pizza.update_layout(showlegend=False, margin=dict(t=30, b=0, l=0, r=0))
+                            fig_pizza.update_traces(textposition='inside', textinfo='percent+label')
+                            st.plotly_chart(fig_pizza, use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("Ainda não há registros.")
 
+    st.markdown('<div class="no-print">', unsafe_allow_html=True)
     st.markdown("---")
-    
-    # --- POSIÇÃO AJUSTADA: ESTOQUE EM CIMA, VENDAS EM BAIXO ---
-    
-    # 1. Gráfico de ESTOQUE
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
     df_t20 = df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER', ascending=True)
     fig_est = px.bar(df_t20, x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', color_continuous_scale='Greens', text_auto='.2f')
@@ -198,8 +216,6 @@ if df_estoque is not None:
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
-
-    # 2. Gráfico de VENDAS
     st.subheader("🏆 Análise de Vendas (KG)")
     col_v1, col_v2 = st.columns([4, 1])
     with col_v2:
@@ -220,19 +236,7 @@ if df_estoque is not None:
         st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
-
-    # 3. Tabela de Detalhamento
     st.subheader("📋 Detalhamento Geral")
-    st.dataframe(
-        df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
-        use_container_width=True, hide_index=True,
-        column_config={
-            "QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
-            "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
-            "CUSTOREAL": st.column_config.NumberColumn("Custo Real", format="R$ %.2f"),
-            "Valor em Estoque": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")
-        }
-    )
-
+    st.dataframe(df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], use_container_width=True, hide_index=True)
     st.info(f"Dashboard ativo na rede interna: http://192.168.1.19:8502")
-    
+    st.markdown('</div>', unsafe_allow_html=True)
