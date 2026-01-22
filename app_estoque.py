@@ -38,7 +38,7 @@ def gerar_pdf_tecnico(df_filtrado):
         pdf.set_y(15)
         pdf.set_font("Arial", 'B', 16)
         pdf.set_text_color(204, 0, 0) 
-        pdf.cell(190, 10, "RELATORIO DE DESOSSA", 0, 1, 'C')
+        pdf.cell(190, 10, "RELATÓRIO DE DESOSSA", 0, 1, 'C')
         pdf.ln(10) 
         pdf.set_font("Arial", 'B', 9)
         pdf.set_fill_color(235, 235, 235)
