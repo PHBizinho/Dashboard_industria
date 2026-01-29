@@ -130,13 +130,12 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- 4. PREPARAÇÃO DOS DADOS DE RENDIMENTO (HISTÓRICO REAL) ---
+# --- 4. PREPARAÇÃO DOS DADOS DE RENDIMENTO ---
 cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
 
 if os.path.exists("DESOSSA_HISTORICO.csv"):
     df_h_real = pd.read_csv("DESOSSA_HISTORICO.csv")
     peso_total_entrada = df_h_real['ENTRADA'].sum()
-    
     if peso_total_entrada > 0:
         lista_rend = []
         for corte in cortes_lista:
@@ -179,11 +178,9 @@ if df_estoque is not None:
 
     with tab_rend:
         st.subheader(f"Rendimento Médio Baseado em Dados: {modo_dados}")
-        fig_real = px.bar(
-            df_rendimento_final.sort_values("Rendimento (%)", ascending=True), 
-            x="Rendimento (%)", y="Corte", orientation='h', 
-            color="Rendimento (%)", color_continuous_scale='Reds', text_auto='.2f'
-        )
+        fig_real = px.bar(df_rendimento_final.sort_values("Rendimento (%)", ascending=True), 
+                          x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", 
+                          color_continuous_scale='Reds', text_auto='.2f')
         fig_real.update_traces(textfont_size=15, textposition='outside', cliponaxis=False)
         fig_real.update_layout(margin=dict(r=80), height=600)
         st.plotly_chart(fig_real, use_container_width=True)
@@ -202,7 +199,10 @@ if df_estoque is not None:
         if senha_acesso == "serido123": 
             with st.form("form_desossa", clear_on_submit=True):
                 f1, f2, f3, f4, f5, f6 = st.columns(6)
-                res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "BOI DOURADO", "OUTROS"]), "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total Entrada", 0.0)}
+                res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), 
+                           "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), 
+                           "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "BOI DOURADO", "OUTROS"]), 
+                           "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total Entrada", 0.0)}
                 c_form = st.columns(2)
                 for i, corte in enumerate(cortes_lista):
                     with (c_form[0] if i % 2 == 0 else c_form[1]): 
@@ -234,40 +234,51 @@ if df_estoque is not None:
 
     with tab_evolucao:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
-            st.subheader("Análise Temporal de Rendimento")
+            st.subheader("Benchmark de Fornecedores por Corte")
             df_temp = pd.read_csv("DESOSSA_HISTORICO.csv")
             df_temp['DATA'] = pd.to_datetime(df_temp['DATA'])
-            df_temp = df_temp.sort_values('DATA')
-            c_ev1, c_ev2 = st.columns([2, 2])
-            with c_ev1:
-                cortes_selecionados = st.multiselect("Selecione os Cortes para Comparar:", options=cortes_lista, default=["CONTRAFILE", "COXAO MOLE", "PICANHA"])
-            with c_ev2:
-                fornecedor_ev = st.selectbox("Filtrar por Fornecedor (Evolução):", ["Todos"] + sorted(df_temp['FORNECEDOR'].unique().tolist()), key="ev_forn")
-            if fornecedor_ev != "Todos":
-                df_temp = df_temp[df_temp['FORNECEDOR'] == fornecedor_ev]
-            for corte in cortes_selecionados:
-                df_temp[f"{corte} (%)"] = (df_temp[corte] / df_temp['ENTRADA']) * 100
-            fig_evolucao = px.line(df_temp, x='DATA', y=[f"{corte} (%)" for corte in cortes_selecionados], markers=True, 
-                                   title=f"Evolução do Rendimento - {fornecedor_ev}",
-                                   labels={'value': 'Rendimento (%)', 'DATA': 'Data da Desossa', 'variable': 'Corte'})
-            fig_evolucao.update_layout(hovermode="x unified", legend_title="Cortes")
-            fig_evolucao.update_traces(line=dict(width=3), marker=dict(size=10))
-            st.plotly_chart(fig_evolucao, use_container_width=True)
-        else: st.info("Aguardando dados históricos.")
+            
+            ev_c1, ev_c2 = st.columns([2, 3])
+            with ev_c1:
+                corte_alvo = st.selectbox("Selecione o Corte para Comparar:", cortes_lista, index=3) # Default Contrafilé
+            with ev_c2:
+                fornecedores_comp = st.multiselect(
+                    "Selecione os Fornecedores para comparar este corte:", 
+                    options=sorted(df_temp['FORNECEDOR'].unique()),
+                    default=sorted(df_temp['FORNECEDOR'].unique())[:2] # Pega os 2 primeiros como exemplo
+                )
+            
+            if fornecedores_comp:
+                # Filtrar apenas os fornecedores selecionados
+                df_ev = df_temp[df_temp['FORNECEDOR'].isin(fornecedores_comp)].copy()
+                # Calcular rendimento percentual para o corte específico
+                df_ev[f"Rendimento {corte_alvo} (%)"] = (df_ev[corte_alvo] / df_ev['ENTRADA']) * 100
+                df_ev = df_ev.sort_values('DATA')
 
-    # --- 6. ANÁLISE DE ESTOQUE (AJUSTADO PARA FICAR MAIOR) ---
+                fig_benchmark = px.line(
+                    df_ev, x='DATA', y=f"Rendimento {corte_alvo} (%)", color='FORNECEDOR',
+                    markers=True, title=f"Comparativo de Rendimento: {corte_alvo}",
+                    labels={f"Rendimento {corte_alvo} (%)": "Rendimento (%)", "DATA": "Data da Desossa"}
+                )
+                fig_benchmark.update_layout(hovermode="x unified")
+                fig_benchmark.update_traces(line=dict(width=3), marker=dict(size=10))
+                st.plotly_chart(fig_benchmark, use_container_width=True)
+                
+                # Tabela resumo abaixo do gráfico
+                st.markdown("**Média de Rendimento no Período Selecionado:**")
+                resumo_comp = df_ev.groupby('FORNECEDOR')[f"Rendimento {corte_alvo} (%)"].mean().reset_index()
+                st.dataframe(resumo_comp.style.format({f"Rendimento {corte_alvo} (%)": "{:.2f}%"}), hide_index=True)
+            else:
+                st.warning("Selecione pelo menos um fornecedor para visualizar o gráfico.")
+        else:
+            st.info("Aguardando dados históricos.")
+
+    # --- 6. ANÁLISE DE ESTOQUE ---
     st.markdown("---")
     st.subheader("🥩 Top 20 - Volume em Estoque (kg)")
-    fig_est = px.bar(
-        df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER'), 
-        x='QTESTGER', 
-        y='Descrição', 
-        orientation='h', 
-        color='QTESTGER', 
-        color_continuous_scale='Greens', 
-        text_auto='.2f'
-    )
-    # Aumentando o tamanho para 700 e ajustando fontes
+    fig_est = px.bar(df_estoque.nlargest(20, 'QTESTGER').sort_values('QTESTGER'), 
+                     x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', 
+                     color_continuous_scale='Greens', text_auto='.2f')
     fig_est.update_layout(height=700, margin=dict(r=80))
     fig_est.update_traces(textfont_size=14, textposition='outside', cliponaxis=False)
     st.plotly_chart(fig_est, use_container_width=True)
