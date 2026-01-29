@@ -10,7 +10,6 @@ from fpdf import FPDF
 # --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
-# Estilo para esconder elementos ao imprimir PDF ou via navegador
 st.markdown("""
     <style>
     @media print {
@@ -23,7 +22,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Inicialização do Client Oracle (Ajuste o caminho se necessário no servidor do T.I)
 if 'oracle_client_initialized' not in st.session_state:
     try:
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
@@ -132,10 +130,9 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- 4. LISTA DE CORTES ---
+# --- 4. PREPARAÇÃO DOS DADOS ---
 cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
 
-# Carregar rendimento para o simulador
 if os.path.exists("DESOSSA_HISTORICO.csv"):
     df_h_real = pd.read_csv("DESOSSA_HISTORICO.csv")
     peso_total_entrada = df_h_real['ENTRADA'].sum()
@@ -155,7 +152,7 @@ else:
     df_rendimento_final = pd.DataFrame(dados_padrao)
     modo_dados = "ESTIMADO (PADRÃO)"
 
-# --- 5. INTERFACE PRINCIPAL ---
+# --- 5. INTERFACE ---
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
     if os.path.exists("MARCA-SERIDOENSE_.png"):
@@ -246,10 +243,9 @@ if df_estoque is not None:
                 fornecedores_comp = st.multiselect("Comparar Fornecedores:", options=sorted(df_temp['FORNECEDOR'].unique()),
                                                   default=sorted(df_temp['FORNECEDOR'].unique())[:2])
             
-            # Cálculo de Benchmark Histórico Interno (Hoje vs Média)
+            # --- Benchmark Interno ---
             df_corte_geral = df_temp.copy()
             df_corte_geral['Rend_%'] = (df_corte_geral[corte_alvo] / df_corte_geral['ENTRADA']) * 100
-            
             media_historica = df_corte_geral['Rend_%'].mean()
             ultimo_rendimento = df_corte_geral['Rend_%'].iloc[-1]
             variacao = ultimo_rendimento - media_historica
@@ -266,11 +262,24 @@ if df_estoque is not None:
                 df_ev[f"Rendimento {corte_alvo} (%)"] = (df_ev[corte_alvo] / df_ev['ENTRADA']) * 100
                 df_ev = df_ev.sort_values('DATA')
 
+                # Gráfico de Evolução
                 fig_benchmark = px.line(df_ev, x='DATA', y=f"Rendimento {corte_alvo} (%)", color='FORNECEDOR',
                                         markers=True, title=f"Evolução Temporal: {corte_alvo}",
                                         labels={f"Rendimento {corte_alvo} (%)": "Rendimento (%)"})
                 fig_benchmark.update_layout(hovermode="x unified")
                 st.plotly_chart(fig_benchmark, use_container_width=True)
+
+                # --- TABELA DE COMPARAÇÃO DE FORNECEDORES (RESTAURADA) ---
+                st.markdown(f"#### 📊 Comparativo de Médias: {corte_alvo}")
+                resumo_comp = df_ev.groupby('FORNECEDOR')[f"Rendimento {corte_alvo} (%)"].mean().reset_index()
+                resumo_comp.columns = ['Fornecedor', 'Média de Rendimento (%)']
+                
+                # Formatação visual da tabela
+                st.dataframe(
+                    resumo_comp.sort_values('Média de Rendimento (%)', ascending=False).style.format({'Média de Rendimento (%)': '{:.2f}%'}),
+                    use_container_width=True,
+                    hide_index=True
+                )
         else:
             st.info("Aguardando histórico.")
 
