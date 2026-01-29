@@ -130,7 +130,7 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- 4. PREPARAÇÃO DOS DADOS ---
+# --- 4. LISTA DE CORTES E PREPARAÇÃO ---
 cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
 
 if os.path.exists("DESOSSA_HISTORICO.csv"):
@@ -152,7 +152,7 @@ else:
     df_rendimento_final = pd.DataFrame(dados_padrao)
     modo_dados = "ESTIMADO (PADRÃO)"
 
-# --- 5. INTERFACE ---
+# --- 5. INTERFACE PRINCIPAL ---
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
     if os.path.exists("MARCA-SERIDOENSE_.png"):
@@ -186,10 +186,12 @@ if df_estoque is not None:
 
     with tab_sim:
         st.subheader("Simulador de Produção (Base Real)")
-        p_entrada = st.number_input("Peso Total da Carga (Kg):", min_value=0.0, value=1000.0)
+        p_entrada = st.number_input("Peso Total da Carga para Simular (Kg):", min_value=0.0, value=1000.0)
         df_sim = df_rendimento_final.copy()
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
+        # REINSERIDO: Total abaixo da tabela do simulador
+        st.success(f"**Total Geral Estimado de Carne/Produtos: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
     with tab_lancto:
         st.subheader("Novo Registro de Desossa")
@@ -243,45 +245,30 @@ if df_estoque is not None:
                 fornecedores_comp = st.multiselect("Comparar Fornecedores:", options=sorted(df_temp['FORNECEDOR'].unique()),
                                                   default=sorted(df_temp['FORNECEDOR'].unique())[:2])
             
-            # --- Benchmark Interno ---
-            df_corte_geral = df_temp.copy()
-            df_corte_geral['Rend_%'] = (df_corte_geral[corte_alvo] / df_corte_geral['ENTRADA']) * 100
-            media_historica = df_corte_geral['Rend_%'].mean()
-            ultimo_rendimento = df_corte_geral['Rend_%'].iloc[-1]
-            variacao = ultimo_rendimento - media_historica
+            df_corte_ger = df_temp.copy()
+            df_corte_ger['Rend_%'] = (df_corte_ger[corte_alvo] / df_corte_ger['ENTRADA']) * 100
+            media_h = df_corte_ger['Rend_%'].mean()
+            ultimo_r = df_corte_ger['Rend_%'].iloc[-1]
+            var = ultimo_r - media_h
 
             m1, m2, m3 = st.columns(3)
-            m1.metric("Média Histórica (Benchmark)", f"{media_historica:.2f}%")
-            m2.metric("Último Rendimento Real", f"{ultimo_rendimento:.2f}%")
-            m3.metric("Desvio vs Padrão", f"{variacao:.2f}%", delta=f"{variacao:.2f}%")
+            m1.metric("Média Histórica (Benchmark)", f"{media_h:.2f}%")
+            m2.metric("Último Rendimento Real", f"{ultimo_r:.2f}%")
+            m3.metric("Desvio vs Padrão", f"{var:.2f}%", delta=f"{var:.2f}%")
             
             st.markdown("---")
-
             if fornecedores_comp:
                 df_ev = df_temp[df_temp['FORNECEDOR'].isin(fornecedores_comp)].copy()
                 df_ev[f"Rendimento {corte_alvo} (%)"] = (df_ev[corte_alvo] / df_ev['ENTRADA']) * 100
                 df_ev = df_ev.sort_values('DATA')
-
-                # Gráfico de Evolução
                 fig_benchmark = px.line(df_ev, x='DATA', y=f"Rendimento {corte_alvo} (%)", color='FORNECEDOR',
-                                        markers=True, title=f"Evolução Temporal: {corte_alvo}",
-                                        labels={f"Rendimento {corte_alvo} (%)": "Rendimento (%)"})
-                fig_benchmark.update_layout(hovermode="x unified")
+                                        markers=True, title=f"Evolução Temporal: {corte_alvo}")
                 st.plotly_chart(fig_benchmark, use_container_width=True)
 
-                # --- TABELA DE COMPARAÇÃO DE FORNECEDORES (RESTAURADA) ---
                 st.markdown(f"#### 📊 Comparativo de Médias: {corte_alvo}")
                 resumo_comp = df_ev.groupby('FORNECEDOR')[f"Rendimento {corte_alvo} (%)"].mean().reset_index()
-                resumo_comp.columns = ['Fornecedor', 'Média de Rendimento (%)']
-                
-                # Formatação visual da tabela
-                st.dataframe(
-                    resumo_comp.sort_values('Média de Rendimento (%)', ascending=False).style.format({'Média de Rendimento (%)': '{:.2f}%'}),
-                    use_container_width=True,
-                    hide_index=True
-                )
-        else:
-            st.info("Aguardando histórico.")
+                st.dataframe(resumo_comp.style.format({f"Rendimento {corte_alvo} (%)": "{:.2f}%"}), use_container_width=True, hide_index=True)
+        else: st.info("Aguardando histórico.")
 
     # --- 6. ANÁLISE DE ESTOQUE ---
     st.markdown("---")
@@ -290,7 +277,6 @@ if df_estoque is not None:
                      x='QTESTGER', y='Descrição', orientation='h', color='QTESTGER', 
                      color_continuous_scale='Greens', text_auto='.2f')
     fig_est.update_layout(height=700, margin=dict(r=80))
-    fig_est.update_traces(textfont_size=14, textposition='outside', cliponaxis=False)
     st.plotly_chart(fig_est, use_container_width=True)
 
     st.markdown("---")
@@ -298,19 +284,26 @@ if df_estoque is not None:
     cv1, cv2 = st.columns([4, 1])
     with cv2: 
         v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
-    df_vendas_final = df_estoque.copy()
+        # REINSERIDO: Filtro de pesquisa de cortes nas vendas
+        filtro_vendas = st.multiselect("Pesquisar Cortes:", sorted(df_estoque['Descrição'].unique()))
+    
+    df_vendas_f = df_estoque.copy()
+    if filtro_vendas: 
+        df_vendas_f = df_vendas_f[df_vendas_f['Descrição'].isin(filtro_vendas)]
+        
     with cv1:
         if v_modo == "Mês Atual":
-            fig_v_atual = px.bar(df_vendas_final.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
-            fig_v_atual.update_traces(textfont_size=14, textposition='outside')
+            # Se houver filtro, mostra os filtrados, senão o top 15
+            dados_venda = df_vendas_f if filtro_vendas else df_vendas_f.nlargest(15, 'QTVENDMES')
+            fig_v_atual = px.bar(dados_venda, x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
             st.plotly_chart(fig_v_atual, use_container_width=True)
         else:
-            fig_v = go.Figure(); meses = obter_nomes_meses(); top_10 = df_vendas_final.nlargest(10, 'QTVENDMES')
+            dados_comp = df_vendas_f if filtro_vendas else df_vendas_f.nlargest(10, 'QTVENDMES')
+            fig_v = go.Figure(); meses = obter_nomes_meses()
             for i, c_v in enumerate(['QTVENDMES', 'QTVENDMES1', 'QTVENDMES2', 'QTVENDMES3']):
-                fig_v.add_trace(go.Bar(name=meses[i], y=top_10['Descrição'], x=top_10[c_v], orientation='h'))
+                fig_v.add_trace(go.Bar(name=meses[i], y=dados_comp['Descrição'], x=dados_comp[c_v], orientation='h'))
             st.plotly_chart(fig_v.update_layout(barmode='group', height=500), use_container_width=True)
 
     st.markdown("---")
     st.subheader("📋 Detalhamento Geral de Itens")
-    st.dataframe(df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
-                 use_container_width=True, hide_index=True)
+    st.dataframe(df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], use_container_width=True, hide_index=True)
