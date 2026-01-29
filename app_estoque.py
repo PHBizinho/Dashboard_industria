@@ -10,6 +10,7 @@ from fpdf import FPDF
 # --- 1. CONFIGURAÇÃO AMBIENTE E ESTILO ---
 st.set_page_config(page_title="Dashboard Seridoense", layout="wide")
 
+# Estilo para esconder elementos ao imprimir PDF ou via navegador
 st.markdown("""
     <style>
     @media print {
@@ -22,6 +23,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Inicialização do Client Oracle (Ajuste o caminho se necessário no servidor do T.I)
 if 'oracle_client_initialized' not in st.session_state:
     try:
         oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_19_29")
@@ -130,9 +132,10 @@ def obter_nomes_meses():
         lista.append(f"{meses_pt[m]}/{str(y)[2:]}")
     return lista
 
-# --- 4. PREPARAÇÃO DOS DADOS DE RENDIMENTO ---
+# --- 4. LISTA DE CORTES ---
 cortes_lista = ["ARANHA", "CAPA CONTRA FILE", "CHAMBARIL TRASEIRO", "CONTRAFILE", "CORACAO ALCATRA", "COXAO DURO", "COXAO MOLE", "FILE MIGNON", "FRALDA", "LOMBO PAULISTA/LAGARTO", "MAMINHA", "MUSCULO TRASEIRO", "PATINHO", "PICANHA", "CARNE BOVINA (LIMPEZA)", "COSTELINHA CONTRA", "OSSO (Descarte)", "OSSO SERRA", "OSSO PATINHO", "SEBO", "ROJAO DA CAPA", "FILEZINHO DE MOCOTÓ"]
 
+# Carregar rendimento para o simulador
 if os.path.exists("DESOSSA_HISTORICO.csv"):
     df_h_real = pd.read_csv("DESOSSA_HISTORICO.csv")
     peso_total_entrada = df_h_real['ENTRADA'].sum()
@@ -152,7 +155,7 @@ else:
     df_rendimento_final = pd.DataFrame(dados_padrao)
     modo_dados = "ESTIMADO (PADRÃO)"
 
-# --- 5. INTERFACE ---
+# --- 5. INTERFACE PRINCIPAL ---
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
     if os.path.exists("MARCA-SERIDOENSE_.png"):
@@ -172,12 +175,11 @@ if df_estoque is not None:
     st.markdown("---")
 
     tab_rend, tab_sim, tab_lancto, tab_consulta, tab_evolucao = st.tabs([
-        "📊 Gráfico de Rendimento Real", "🧮 Simulador de Carga Real", 
-        "📝 Registro Real Diário", "🔍 Histórico e Consulta", "📈 Evolução de Rendimento"
+        "📊 Rendimento Geral", "🧮 Simulador", "📝 Registro Diário", "🔍 Consulta", "📈 Benchmark e Evolução"
     ])
 
     with tab_rend:
-        st.subheader(f"Rendimento Médio Baseado em Dados: {modo_dados}")
+        st.subheader(f"Média de Rendimento: {modo_dados}")
         fig_real = px.bar(df_rendimento_final.sort_values("Rendimento (%)", ascending=True), 
                           x="Rendimento (%)", y="Corte", orientation='h', color="Rendimento (%)", 
                           color_continuous_scale='Reds', text_auto='.2f')
@@ -186,42 +188,41 @@ if df_estoque is not None:
         st.plotly_chart(fig_real, use_container_width=True)
 
     with tab_sim:
-        st.subheader(f"Simulador com Percentuais Reais ({modo_dados})")
-        p_entrada = st.number_input("Peso da Carga para Simular (Kg):", min_value=0.0, value=1000.0)
+        st.subheader("Simulador de Produção (Base Real)")
+        p_entrada = st.number_input("Peso Total da Carga (Kg):", min_value=0.0, value=1000.0)
         df_sim = df_rendimento_final.copy()
         df_sim['Previsão (Kg)'] = (df_sim['Rendimento (%)'] / 100) * p_entrada
         st.dataframe(df_sim.sort_values('Previsão (Kg)', ascending=False), use_container_width=True, hide_index=True)
-        st.success(f"**Total Geral Estimado de Carne/Produtos: {formatar_br(df_sim['Previsão (Kg)'].sum())} Kg**")
 
     with tab_lancto:
-        st.subheader("Lançamento de Desossa")
-        senha_acesso = st.text_input("Senha de Acesso:", type="password", key="senha_lancto")
+        st.subheader("Novo Registro de Desossa")
+        senha_acesso = st.text_input("Senha:", type="password", key="senha_lancto")
         if senha_acesso == "serido123": 
             with st.form("form_desossa", clear_on_submit=True):
                 f1, f2, f3, f4, f5, f6 = st.columns(6)
                 res_val = {"DATA": f1.date_input("Data"), "NF": f2.text_input("Nº NF"), 
                            "TIPO": f3.selectbox("Tipo", ["Boi", "Vaca"]), 
                            "FORNECEDOR": f4.selectbox("Fornecedor", ["JBS", "RIO MARIA", "BOI BRANCO S.A", "BOI DOURADO", "OUTROS"]), 
-                           "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Total Entrada", 0.0)}
+                           "PECAS": f5.number_input("Qtd Peças", 0), "ENTRADA": f6.number_input("Peso Entrada", 0.0)}
                 c_form = st.columns(2)
                 for i, corte in enumerate(cortes_lista):
                     with (c_form[0] if i % 2 == 0 else c_form[1]): 
                         res_val[corte] = st.number_input(f"{corte} (kg)", min_value=0.0, key=f"inp_{corte}")
-                if st.form_submit_button("💾 Salvar no Histórico"):
+                if st.form_submit_button("💾 Salvar Dados"):
                     if res_val["ENTRADA"] > 0 and res_val["NF"]: 
                         salvar_dados_desossa(res_val)
                         st.rerun()
-                    else: st.error("Erro: NF e Peso de Entrada são obrigatórios.")
+                    else: st.error("NF e Peso de Entrada são obrigatórios.")
 
     with tab_consulta:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
             df_h = pd.read_csv("DESOSSA_HISTORICO.csv")
             df_h['DATA'] = pd.to_datetime(df_h['DATA']).dt.date
             cf1, cf2, cf3, cf4 = st.columns([2, 1, 1, 1])
-            with cf1: periodo = st.date_input("Filtrar Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_periodo")
-            with cf2: sel_nf = st.selectbox("Por NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
-            with cf3: sel_forn = st.selectbox("Por Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
-            with cf4: sel_tipo = st.selectbox("Por Tipo:", ["Todos", "Boi", "Vaca"])
+            with cf1: periodo = st.date_input("Período:", [datetime.now().date() - timedelta(days=7), datetime.now().date()], key="filtro_per")
+            with cf2: sel_nf = st.selectbox("NF:", ["Todas"] + sorted(df_h['NF'].astype(str).unique().tolist()))
+            with cf3: sel_forn = st.selectbox("Fornecedor:", ["Todos"] + sorted(df_h['FORNECEDOR'].unique().tolist()))
+            with cf4: sel_tipo = st.selectbox("Tipo:", ["Todos", "Boi", "Vaca"])
             df_f = df_h.copy()
             if len(periodo) == 2: df_f = df_f[(df_f['DATA'] >= periodo[0]) & (df_f['DATA'] <= periodo[1])]
             if sel_nf != "Todas": df_f = df_f[df_f['NF'].astype(str) == sel_nf]
@@ -229,49 +230,49 @@ if df_estoque is not None:
             if sel_tipo != "Todos": df_f = df_f[df_f['TIPO'] == sel_tipo]
             st.dataframe(df_f, use_container_width=True, hide_index=True)
             if not df_f.empty:
-                st.download_button("📄 Gerar Relatórios PDF", gerar_pdf_tecnico(df_f), f"Desossa_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
-        else: st.info("Nenhum histórico encontrado.")
+                st.download_button("📄 Exportar PDFs", gerar_pdf_tecnico(df_f), f"Desossa_{datetime.now().strftime('%d%m%Y')}.pdf", "application/pdf", use_container_width=True)
+        else: st.info("Sem histórico.")
 
     with tab_evolucao:
         if os.path.exists("DESOSSA_HISTORICO.csv"):
-            st.subheader("Benchmark de Fornecedores por Corte")
+            st.subheader("Benchmark de Rendimento Interno e Externo")
             df_temp = pd.read_csv("DESOSSA_HISTORICO.csv")
             df_temp['DATA'] = pd.to_datetime(df_temp['DATA'])
             
             ev_c1, ev_c2 = st.columns([2, 3])
             with ev_c1:
-                corte_alvo = st.selectbox("Selecione o Corte para Comparar:", cortes_lista, index=3) # Default Contrafilé
+                corte_alvo = st.selectbox("Corte para Benchmark:", cortes_lista, index=3)
             with ev_c2:
-                fornecedores_comp = st.multiselect(
-                    "Selecione os Fornecedores para comparar este corte:", 
-                    options=sorted(df_temp['FORNECEDOR'].unique()),
-                    default=sorted(df_temp['FORNECEDOR'].unique())[:2] # Pega os 2 primeiros como exemplo
-                )
+                fornecedores_comp = st.multiselect("Comparar Fornecedores:", options=sorted(df_temp['FORNECEDOR'].unique()),
+                                                  default=sorted(df_temp['FORNECEDOR'].unique())[:2])
             
+            # Cálculo de Benchmark Histórico Interno (Hoje vs Média)
+            df_corte_geral = df_temp.copy()
+            df_corte_geral['Rend_%'] = (df_corte_geral[corte_alvo] / df_corte_geral['ENTRADA']) * 100
+            
+            media_historica = df_corte_geral['Rend_%'].mean()
+            ultimo_rendimento = df_corte_geral['Rend_%'].iloc[-1]
+            variacao = ultimo_rendimento - media_historica
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Média Histórica (Benchmark)", f"{media_historica:.2f}%")
+            m2.metric("Último Rendimento Real", f"{ultimo_rendimento:.2f}%")
+            m3.metric("Desvio vs Padrão", f"{variacao:.2f}%", delta=f"{variacao:.2f}%")
+            
+            st.markdown("---")
+
             if fornecedores_comp:
-                # Filtrar apenas os fornecedores selecionados
                 df_ev = df_temp[df_temp['FORNECEDOR'].isin(fornecedores_comp)].copy()
-                # Calcular rendimento percentual para o corte específico
                 df_ev[f"Rendimento {corte_alvo} (%)"] = (df_ev[corte_alvo] / df_ev['ENTRADA']) * 100
                 df_ev = df_ev.sort_values('DATA')
 
-                fig_benchmark = px.line(
-                    df_ev, x='DATA', y=f"Rendimento {corte_alvo} (%)", color='FORNECEDOR',
-                    markers=True, title=f"Comparativo de Rendimento: {corte_alvo}",
-                    labels={f"Rendimento {corte_alvo} (%)": "Rendimento (%)", "DATA": "Data da Desossa"}
-                )
+                fig_benchmark = px.line(df_ev, x='DATA', y=f"Rendimento {corte_alvo} (%)", color='FORNECEDOR',
+                                        markers=True, title=f"Evolução Temporal: {corte_alvo}",
+                                        labels={f"Rendimento {corte_alvo} (%)": "Rendimento (%)"})
                 fig_benchmark.update_layout(hovermode="x unified")
-                fig_benchmark.update_traces(line=dict(width=3), marker=dict(size=10))
                 st.plotly_chart(fig_benchmark, use_container_width=True)
-                
-                # Tabela resumo abaixo do gráfico
-                st.markdown("**Média de Rendimento no Período Selecionado:**")
-                resumo_comp = df_ev.groupby('FORNECEDOR')[f"Rendimento {corte_alvo} (%)"].mean().reset_index()
-                st.dataframe(resumo_comp.style.format({f"Rendimento {corte_alvo} (%)": "{:.2f}%"}), hide_index=True)
-            else:
-                st.warning("Selecione pelo menos um fornecedor para visualizar o gráfico.")
         else:
-            st.info("Aguardando dados históricos.")
+            st.info("Aguardando histórico.")
 
     # --- 6. ANÁLISE DE ESTOQUE ---
     st.markdown("---")
@@ -288,9 +289,7 @@ if df_estoque is not None:
     cv1, cv2 = st.columns([4, 1])
     with cv2: 
         v_modo = st.radio("Visão Vendas:", ["Mês Atual", "Comparativo"])
-        filtro_vendas = st.multiselect("Pesquisar Cortes:", sorted(df_estoque['Descrição'].unique()))
     df_vendas_final = df_estoque.copy()
-    if filtro_vendas: df_vendas_final = df_vendas_final[df_vendas_final['Descrição'].isin(filtro_vendas)]
     with cv1:
         if v_modo == "Mês Atual":
             fig_v_atual = px.bar(df_vendas_final.nlargest(15, 'QTVENDMES'), x='QTVENDMES', y='Descrição', orientation='h', color_continuous_scale='Blues', text_auto='.1f')
@@ -305,8 +304,4 @@ if df_estoque is not None:
     st.markdown("---")
     st.subheader("📋 Detalhamento Geral de Itens")
     st.dataframe(df_estoque[['Código', 'Descrição', 'QTESTGER', 'Disponível', 'CUSTOREAL', 'Valor em Estoque']], 
-                 use_container_width=True, hide_index=True,
-                 column_config={"QTESTGER": st.column_config.NumberColumn("Estoque", format="%.2f Kg"),
-                                "Disponível": st.column_config.NumberColumn("Disponível", format="%.2f Kg"),
-                                "CUSTOREAL": st.column_config.NumberColumn("Custo Real", format="R$ %.2f"),
-                                "Valor em Estoque": st.column_config.NumberColumn("Total (R$)", format="R$ %.2f")})
+                 use_container_width=True, hide_index=True)
